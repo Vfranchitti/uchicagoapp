@@ -47,7 +47,9 @@ from src.plot_style import (
     HEALTH_LAB_TEAL,
     LABEL_COLORS,
     LABEL_DISPLAY_NAMES,
+    LOGGER_COLORS,
     LOGGER_MARKERS,
+    PANEL_GREY,
     PIPE_COLORS,
     PIPE_MARKERS,
     TEXT_DARK,
@@ -69,6 +71,27 @@ JITTER_WIDTH = 0.18
 MIN_LABEL_SEPARATION_HOURS = 0.6    # closer dug-site labels alternate
 MIN_SEGMENT_FOR_COUNT_LABEL = 3     # smaller bar segments go unlabeled
 POINTS_PER_INCH = 72
+# All-recordings spectrogram grid (Fig 15).
+FULL_PAGE_FIGURE = (7.5, 10.5)
+ALL_SPECTROGRAM_CAST_COLUMNS = 4
+ALL_SPECTROGRAM_PVC_COLUMNS = 2
+BLOCK_GAP_RATIO = 0.18              # gap row/column, relative to a panel
+BLOCK_DIVIDER_COLOR = '#BDBDBD'
+BLOCK_HEADER_HEIGHT = 0.045         # figure fraction above the grid
+BLOCK_HEADER_WIDTH = 0.045          # figure fraction left of the grid
+ALL_SPECTROGRAM_TOP = 0.885
+ALL_SPECTROGRAM_LEFT = 0.10
+ALL_SPECTROGRAM_RIGHT = 0.90
+# Descriptive overview (Fig 16). Hours are clock hours, evening first.
+OVERVIEW_FIGURE = (7.5, 8.0)
+OVERNIGHT_HOUR_BINS = (22, 23, 0, 1, 2, 3, 4, 5, 6)
+STAT_TILE_VALUE_SIZE = 22
+HOUR_BAR_LABEL_GAP = 1.1
+HOUR_BAR_HEADROOM = 5
+MATRIX_COLOR_HEADROOM = 1.6         # keeps the darkest cell readable
+PIPE_DISPLAY_NAMES = {'cast_iron': 'Cast iron', 'PVC': 'PVC'}
+MATRIX_COLORMAP = LinearSegmentedColormap.from_list(
+    'pale_teal', ['#FFFFFF', HEALTH_LAB_LIGHT_TEAL])
 # Bounding box of a 7 pt clip ID at 100 dpi; labels closer than this in
 # both directions would overlap.
 LABEL_WIDTH_PIXELS = 30
@@ -879,6 +902,352 @@ def plot_quality_spotlight(metadata, amplitudes, clip_features):
                            top=0.87)
 
 
+def _block_cells(n_rows, n_columns, row_start, column_start):
+    """Grid cells of one block, filled left to right, then top to bottom."""
+    return [(row_start + row, column_start + column)
+            for row in range(n_rows) for column in range(n_columns)]
+
+
+def _grid_span(fig, grid, rows, columns):
+    """Figure-fraction (left, right, bottom, top) covered by grid cells."""
+    first = grid[rows[0], columns[0]].get_position(fig)
+    last = grid[rows[-1], columns[-1]].get_position(fig)
+    return first.x0, last.x1, last.y0, first.y1
+
+
+def plot_all_spectrograms(metadata, amplitudes):
+    """Fig 15 (ACCURATE). Spectrogram of every recording, by logger and pipe.
+
+    Logger A blocks sit above logger B; cast iron sits left of PVC. Within
+    each block, recordings run in clock order (earliest first).
+    """
+    is_cast = metadata['pipe_material'] == 'cast_iron'
+    n_cast_rows = {logger: int(np.ceil(
+        ((metadata['logger_model'] == logger) & is_cast).sum()
+        / ALL_SPECTROGRAM_CAST_COLUMNS)) for logger in ('A', 'B')}
+    n_pvc_rows = {logger: int(np.ceil(
+        ((metadata['logger_model'] == logger) & ~is_cast).sum()
+        / ALL_SPECTROGRAM_PVC_COLUMNS)) for logger in ('A', 'B')}
+    block_rows = {logger: max(n_cast_rows[logger], n_pvc_rows[logger])
+                  for logger in ('A', 'B')}
+    n_columns = ALL_SPECTROGRAM_CAST_COLUMNS + 1 + ALL_SPECTROGRAM_PVC_COLUMNS
+    n_rows = block_rows['A'] + 1 + block_rows['B']
+    pvc_first_column = ALL_SPECTROGRAM_CAST_COLUMNS + 1
+    b_first_row = block_rows['A'] + 1
+    fig = plt.figure(figsize=FULL_PAGE_FIGURE)
+    grid = fig.add_gridspec(
+        n_rows, n_columns, hspace=0.75, wspace=0.12,
+        width_ratios=([1] * ALL_SPECTROGRAM_CAST_COLUMNS + [BLOCK_GAP_RATIO]
+                      + [1] * ALL_SPECTROGRAM_PVC_COLUMNS),
+        height_ratios=([1] * block_rows['A'] + [BLOCK_GAP_RATIO]
+                       + [1] * block_rows['B']))
+    spectrograms = {clip_id: _spectrogram_db(amplitudes[clip_id])
+                    for clip_id in metadata['clip_id']}
+    all_db = np.concatenate([db.ravel() for _, _, db in
+                             spectrograms.values()])
+    color_floor, color_ceiling = np.percentile(
+        all_db, [SPECTROGRAM_DB_FLOOR_PERCENTILE,
+                 SPECTROGRAM_DB_CEILING_PERCENTILE])
+    blocks = {
+        ('A', 'cast_iron'): _block_cells(block_rows['A'],
+                                         ALL_SPECTROGRAM_CAST_COLUMNS, 0, 0),
+        ('A', 'PVC'): _block_cells(block_rows['A'],
+                                   ALL_SPECTROGRAM_PVC_COLUMNS, 0,
+                                   pvc_first_column),
+        ('B', 'cast_iron'): _block_cells(block_rows['B'],
+                                         ALL_SPECTROGRAM_CAST_COLUMNS,
+                                         b_first_row, 0),
+        ('B', 'PVC'): _block_cells(block_rows['B'],
+                                   ALL_SPECTROGRAM_PVC_COLUMNS, b_first_row,
+                                   pvc_first_column),
+    }
+    for (logger, pipe), cells in blocks.items():
+        in_block = metadata[(metadata['logger_model'] == logger)
+                            & (metadata['pipe_material'] == pipe)
+                            ].sort_values('overnight_hour')
+        for (row, column), record in zip(cells, in_block.itertuples()):
+            ax = fig.add_subplot(grid[row, column])
+            times_seconds, frequencies_hz, power_db = spectrograms[
+                record.clip_id]
+            image = ax.pcolormesh(times_seconds, frequencies_hz, power_db,
+                                  cmap=SPECTROGRAM_COLORMAP,
+                                  vmin=color_floor, vmax=color_ceiling,
+                                  shading='auto', rasterized=True)
+            ax.grid(False)
+            ax.set_ylim(0, NYQUIST_HZ)
+            ax.set_xlim(0, CLIP_DURATION_SECONDS)
+            ax.tick_params(labelsize=5, length=1.5, pad=1)
+            ax.set_yticks([0, 1000, 2000])
+            ax.set_yticklabels(['0', '1k', '2k'])
+            ax.set_xticks([0, 2, 4])
+            if column not in (0, pvc_first_column):
+                ax.set_yticklabels([])
+            if row != n_rows - 1:
+                ax.set_xticklabels([])
+            title_color = (TEXT_DARK if record.label_group == 'unlabeled'
+                           else LABEL_COLORS[record.label_group])
+            dug_tag = {LEAK_LABEL: '  LEAK', NO_LEAK_LABEL: '  NO LEAK'
+                       }.get(record.label_group, '')
+            ax.set_title(
+                f'{record.clip_id}{dug_tag}\n'
+                f'{logger} | {pipe.replace("_", " ")} | '
+                f'{_format_clock(record.recorded_at)}',
+                loc='left', fontsize=5.5, color=title_color, pad=2,
+                linespacing=1.1)
+            for spine in ax.spines.values():
+                spine.set_visible(record.label_group != 'unlabeled')
+                spine.set_color(title_color)
+                spine.set_linewidth(1.2)
+    bottom = add_title_and_note(
+        fig, 15, 'Spectrograms of all 46 recordings, by logger model and '
+        'pipe material',
+        'Each panel shows sound power by pitch (vertical, 0-2,000 Hz) and '
+        'time (horizontal, 0-5 s) on one shared color scale; darker is '
+        'louder. Logger A is on top, logger B below; cast iron is left, '
+        'PVC right. Within each block, recordings run in clock order. Dug '
+        'sites are outlined and labeled (maroon = leak, teal = no leak). '
+        'All six dug sites are cast iron; no PVC site has been dug. Pitch '
+        'axis in Hz (1k = 1,000); time axis in seconds.')
+    fig.subplots_adjust(top=ALL_SPECTROGRAM_TOP, bottom=bottom,
+                        left=ALL_SPECTROGRAM_LEFT, right=ALL_SPECTROGRAM_RIGHT)
+    # Light lines through the gap row and column separate the four blocks.
+    grid_left, grid_right, grid_bottom, grid_top = _grid_span(
+        fig, grid, [0, n_rows - 1], [0, n_columns - 1])
+    gap_left, gap_right, _, _ = _grid_span(
+        fig, grid, [0], [ALL_SPECTROGRAM_CAST_COLUMNS])
+    _, _, gap_bottom, gap_top = _grid_span(
+        fig, grid, [block_rows['A']], [0])
+    divider_x = (gap_left + gap_right) / 2
+    divider_y = (gap_bottom + gap_top) / 2
+    fig.add_artist(Line2D([divider_x, divider_x],
+                          [grid_bottom, grid_top + BLOCK_HEADER_HEIGHT],
+                          color=BLOCK_DIVIDER_COLOR, linewidth=0.9))
+    fig.add_artist(Line2D([grid_left - BLOCK_HEADER_WIDTH, grid_right],
+                          [divider_y, divider_y],
+                          color=BLOCK_DIVIDER_COLOR, linewidth=0.9))
+    # Column headers (pipe) and row headers (logger), with counts.
+    counts = metadata.groupby(['logger_model', 'pipe_material']).size()
+    pipe_spans = {'cast_iron': list(range(ALL_SPECTROGRAM_CAST_COLUMNS)),
+                  'PVC': list(range(pvc_first_column, n_columns))}
+    for pipe, columns in pipe_spans.items():
+        span_left, span_right, _, _ = _grid_span(fig, grid, [0], columns)
+        n_pipe = int(counts.xs(pipe, level='pipe_material').sum())
+        fig.text((span_left + span_right) / 2,
+                 grid_top + BLOCK_HEADER_HEIGHT * 0.55,
+                 f'{pipe.replace("_", " ").upper()} PIPE ({n_pipe})',
+                 ha='center', va='center', fontsize=8.5, fontweight='bold',
+                 color=PIPE_COLORS[pipe])
+    logger_spans = {'A': list(range(block_rows['A'])),
+                    'B': list(range(b_first_row, n_rows))}
+    for logger, rows in logger_spans.items():
+        _, _, span_bottom, span_top = _grid_span(fig, grid, rows, [0])
+        n_logger = int(counts.xs(logger, level='logger_model').sum())
+        fig.text(grid_left - BLOCK_HEADER_WIDTH * 0.7,
+                 (span_bottom + span_top) / 2,
+                 f'LOGGER {logger} ({n_logger})', rotation=90, ha='center',
+                 va='center', fontsize=8.5, fontweight='bold',
+                 color=LOGGER_COLORS[logger])
+    colorbar_axis = fig.add_axes([ALL_SPECTROGRAM_RIGHT + 0.015,
+                                  grid_bottom + (grid_top - grid_bottom) / 4,
+                                  0.012, (grid_top - grid_bottom) / 2])
+    colorbar = fig.colorbar(image, cax=colorbar_axis)
+    colorbar.set_label('Power (dB, darker = louder)', fontsize=7)
+    colorbar.ax.tick_params(labelsize=6)
+    colorbar.outline.set_visible(False)
+    return finish_and_save(fig, 'eda_15_all_spectrograms', bottom,
+                           top=ALL_SPECTROGRAM_TOP)
+
+
+def _hour_bin_labels():
+    """Clock labels for the overnight hour bins (10 pm ... 6 am)."""
+    return [f'{hour % 12 or 12} {"pm" if hour >= 12 else "am"}'
+            for hour in OVERNIGHT_HOUR_BINS]
+
+
+def _counts_by_hour(df, group_column, levels):
+    """Recordings per clock hour (rows) and group level (columns)."""
+    clock_hour = df['recorded_at'].str[:2].astype(int)
+    return (pd.crosstab(clock_hour, df[group_column])
+            .reindex(index=OVERNIGHT_HOUR_BINS, columns=levels,
+                     fill_value=0))
+
+
+def _draw_stat_tile(ax, value_text, label_text):
+    """Big-number tile in the style of the CARE and HSP reports."""
+    ax.set_facecolor(PANEL_GREY)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.text(0.5, 0.62, value_text, ha='center', va='center',
+            fontsize=STAT_TILE_VALUE_SIZE, fontweight='bold',
+            color=UCHICAGO_MAROON, transform=ax.transAxes)
+    ax.text(0.5, 0.24, label_text, ha='center', va='center', fontsize=7,
+            color=TEXT_DARK, transform=ax.transAxes, linespacing=1.2)
+
+
+def _draw_logger_pipe_matrix(ax, metadata):
+    """2 x 2 table of recordings (and dug sites) by logger and pipe."""
+    loggers, pipes = ('A', 'B'), ('cast_iron', 'PVC')
+    totals = pd.crosstab(metadata['logger_model'], metadata['pipe_material']
+                         ).reindex(index=loggers, columns=pipes,
+                                   fill_value=0)
+    dug = metadata[metadata['is_labeled']]
+    leaks = pd.crosstab(dug['logger_model'], dug['pipe_material'],
+                        values=dug['is_leak'].astype(int), aggfunc='sum'
+                        ).reindex(index=loggers, columns=pipes,
+                                  fill_value=0).fillna(0)
+    n_dug = pd.crosstab(dug['logger_model'], dug['pipe_material']
+                        ).reindex(index=loggers, columns=pipes,
+                                  fill_value=0)
+    ax.imshow(totals.to_numpy(), cmap=MATRIX_COLORMAP, vmin=0,
+              vmax=totals.to_numpy().max() * MATRIX_COLOR_HEADROOM)
+    for row, logger in enumerate(loggers):
+        for column, pipe in enumerate(pipes):
+            ax.text(column, row - 0.1, str(totals.loc[logger, pipe]),
+                    ha='center', va='center', fontsize=16,
+                    fontweight='bold', color=HEALTH_LAB_NAVY)
+            n_site_dug = int(n_dug.loc[logger, pipe])
+            n_site_leaks = int(leaks.loc[logger, pipe])
+            detail = (f'{n_site_dug} dug ({n_site_leaks} leak)'
+                      if n_site_dug else 'none dug')
+            ax.text(column, row + 0.25, detail, ha='center', va='center',
+                    fontsize=7, color=TEXT_GREY if n_site_dug
+                    else UCHICAGO_MAROON)
+    ax.set_xticks(range(len(pipes)))
+    ax.set_xticklabels([f'{PIPE_DISPLAY_NAMES[p]}\n'
+                        f'({totals[p].sum()} sites)' for p in pipes])
+    ax.set_yticks(range(len(loggers)))
+    ax.set_yticklabels([f'Logger {logger}\n({totals.loc[logger].sum()})'
+                        for logger in loggers])
+    ax.tick_params(length=0)
+    ax.xaxis.tick_top()
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_title('Recordings by logger model and pipe material', loc='left',
+                 pad=28)
+
+
+def _draw_hour_bars(ax, metadata, group_column, levels, colors, names,
+                    title):
+    """Stacked bars of recordings per clock hour, commute hour shaded."""
+    counts = _counts_by_hour(metadata, group_column, levels)
+    positions = np.arange(len(OVERNIGHT_HOUR_BINS))
+    commute_position = OVERNIGHT_HOUR_BINS.index(
+        int(MORNING_COMMUTE_START_HOUR))
+    ax.axvspan(commute_position - 0.5, commute_position + 0.5,
+               color=FRESNO_BAND_BLUE, zorder=0, linewidth=0)
+    bottoms = np.zeros(len(positions))
+    for level in levels:
+        values = counts[level].to_numpy()
+        ax.bar(positions, values, bottom=bottoms, color=colors[level],
+               edgecolor='white', linewidth=0.6, width=0.75,
+               label=names[level])
+        bottoms += values
+    for position, total in zip(positions, bottoms):
+        ax.text(position, total + 0.15, f'{total:.0f}', ha='center',
+                va='bottom', fontsize=7, color=TEXT_DARK)
+    dug = metadata[metadata['is_labeled']].copy()
+    dug['clock_hour'] = dug['recorded_at'].str[:2].astype(int)
+    for hour, in_hour in dug.groupby('clock_hour'):
+        position = OVERNIGHT_HOUR_BINS.index(hour)
+        marker_text = '\n'.join(
+            f'{record.clip_id}' for record in in_hour.itertuples())
+        marker_color = (LABEL_COLORS[in_hour['label_group'].iloc[0]]
+                        if in_hour['label_group'].nunique() == 1
+                        else TEXT_DARK)
+        ax.text(position, bottoms[position] + HOUR_BAR_LABEL_GAP,
+                marker_text, ha='center', va='bottom', fontsize=6,
+                color=marker_color, fontweight='bold', linespacing=1.0)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(_hour_bin_labels(), fontsize=7)
+    ax.set_ylim(0, bottoms.max() + HOUR_BAR_HEADROOM)
+    ax.set_ylabel('Recordings')
+    ax.set_title(title, loc='left')
+    ax.legend(loc='upper left', ncol=len(levels), fontsize=7)
+    ax.text(commute_position, ax.get_ylim()[1] * 0.97, 'COMMUTE',
+            ha='center', va='top', fontsize=6, color=HEALTH_LAB_TEAL,
+            fontweight='bold')
+
+
+def plot_descriptive_overview(metadata):
+    """Fig 16 (LAY). What data do we have? Counts by logger, pipe, hour."""
+    fig = plt.figure(figsize=OVERVIEW_FIGURE)
+    grid = fig.add_gridspec(3, 4, height_ratios=[0.45, 1, 1], hspace=0.6,
+                            wspace=0.35)
+    dug = metadata[metadata['is_labeled']]
+    n_commute = int(metadata['is_commute_hours'].sum())
+    n_commute_dug = int(dug['is_commute_hours'].sum())
+    tiles = [
+        (f'{len(metadata)}', 'overnight recordings\n(one per hydrant)'),
+        (f'{len(dug)}', f'dug so far:\n{int(dug["is_leak"].sum())} leak, '
+                        f'{int((~dug["is_leak"].astype(bool)).sum())} '
+                        'no leak'),
+        (f'{(metadata["pipe_material"] == "PVC").sum()}',
+         'PVC sites,\nnone dug'),
+        (f'{n_commute}', f'recorded at/after 6 am\n({n_commute_dug} of '
+                         'them dug)'),
+    ]
+    for column, (value_text, label_text) in enumerate(tiles):
+        _draw_stat_tile(fig.add_subplot(grid[0, column]), value_text,
+                        label_text)
+    _draw_logger_pipe_matrix(fig.add_subplot(grid[1, :2]), metadata)
+    status_ax = fig.add_subplot(grid[1, 2:])
+    groups = [('A', 'cast_iron'), ('A', 'PVC'), ('B', 'cast_iron'),
+              ('B', 'PVC')]
+    status_order = (LEAK_LABEL, NO_LEAK_LABEL, 'unlabeled')
+    for position, (logger, pipe) in enumerate(groups):
+        in_group = metadata[(metadata['logger_model'] == logger)
+                            & (metadata['pipe_material'] == pipe)]
+        left = 0
+        for status in status_order:
+            n_status = int((in_group['label_group'] == status).sum())
+            status_ax.barh(position, n_status, left=left,
+                           color=LABEL_COLORS[status], edgecolor='white',
+                           height=0.6)
+            if n_status:
+                status_ax.text(left + n_status / 2, position, str(n_status),
+                               ha='center', va='center', fontsize=7,
+                               fontweight='bold',
+                               color='white' if status != 'unlabeled'
+                               else TEXT_DARK)
+            left += n_status
+    status_ax.set_yticks(range(len(groups)))
+    status_ax.set_yticklabels([f'{logger}, {pipe.replace("_", " ")}'
+                               for logger, pipe in groups], fontsize=7.5)
+    status_ax.invert_yaxis()
+    status_ax.set_xlabel('Recordings')
+    status_ax.grid(axis='y', visible=False)
+    status_ax.grid(axis='x', color='#EFEFEF')
+    status_ax.set_title('Dig status by logger and pipe', loc='left')
+    status_ax.legend(handles=[Patch(color=LABEL_COLORS[s],
+                                    label=LABEL_DISPLAY_NAMES[s])
+                              for s in status_order],
+                     loc='lower right', fontsize=6.5)
+    _draw_hour_bars(fig.add_subplot(grid[2, :2]), metadata, 'logger_model',
+                    ('A', 'B'), LOGGER_COLORS,
+                    {'A': 'Logger A', 'B': 'Logger B'},
+                    'Recordings per clock hour, by logger')
+    _draw_hour_bars(fig.add_subplot(grid[2, 2:]), metadata, 'pipe_material',
+                    ('cast_iron', 'PVC'), PIPE_COLORS,
+                    {'cast_iron': 'Cast iron', 'PVC': 'PVC'},
+                    'Recordings per clock hour, by pipe')
+    bottom = add_title_and_note(
+        fig, 16, 'What data are available? Recordings by logger, pipe, and '
+        'hour (N=46)',
+        'Hours are pooled by clock hour (e.g., "3 am" = 3:00-3:59). Clip '
+        'IDs above the bars mark the six dug sites (maroon = leak, teal = '
+        'no leak). Logger A outnumbers logger B almost 2 to 1. Only one '
+        'dug site (L06) was recorded before 1 am, none of the 12 PVC sites '
+        'has been dug, and both dug sites recorded in the 6 am hour '
+        '(shaded, when the morning commute is likely under way) had no '
+        'leak.')
+    return finish_and_save(fig, 'eda_16_descriptive_overview', bottom,
+                           top=0.92)
+
+
 def make_all_eda_figures():
     """Load data once and draw every exploratory figure."""
     apply_urban_labs_style()
@@ -900,6 +1269,8 @@ def make_all_eda_figures():
         plot_principal_components(clip_features),
         plot_steadiness_vs_pitch(clip_features),
         plot_quality_spotlight(metadata, amplitudes, clip_features),
+        plot_all_spectrograms(metadata, amplitudes),
+        plot_descriptive_overview(metadata),
     ]
 
 

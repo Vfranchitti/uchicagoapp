@@ -69,6 +69,8 @@ The tags mark what each figure is good for:
 | 12 | `eda_12_principal_components` | Low-dimensional summary | Accurate, low interpretability |
 | 13 | `eda_13_steadiness_vs_pitch` | Two field-note features | Lay, interpretable |
 | 14 | `eda_14_quality_spotlight` | Flagged recordings | Lay |
+| 15 | `eda_15_all_spectrograms` | Time × frequency, all 46 clips, by logger × pipe | Accurate |
+| 16 | `eda_16_descriptive_overview` | Counts by logger, pipe, dig status, clock hour | Lay |
 
 **Accuracy vs. interpretability.** The most information-dense views are the
 spectrograms, spectra and principal components (Figs 5, 6, 12). They also
