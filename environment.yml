@@ -12,3 +12,4 @@ dependencies:
   - seaborn
   - jupyterlab
   - ipykernel
+  - flake8

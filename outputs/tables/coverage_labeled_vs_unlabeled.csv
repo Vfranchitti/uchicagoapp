@@ -1,0 +1,7 @@
+level,factor,leak,no_leak,unlabeled
+A,logger_model,2,2,26
+B,logger_model,1,1,14
+PVC,pipe_material,0,0,12
+cast_iron,pipe_material,3,3,28
+after commute start,recording_timing,0,2,6
+before commute start,recording_timing,3,1,34
