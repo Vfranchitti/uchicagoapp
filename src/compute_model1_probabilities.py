@@ -28,8 +28,8 @@ Prediction (1/0): 1 if the site has a persistent band in the main version.
 
 Outputs
 -------
-outputs/tables/model1_probabilities.csv
-outputs/tables/model1_probability_summary.md
+outputs/tables/3_model1/model1_probabilities.csv
+outputs/tables/3_model1/model1_probability_summary.md
 """
 import numpy as np
 import pandas as pd
@@ -41,6 +41,7 @@ from src.config import (
     INFORMATIVE_DIG_SITE,
     INTENSENESS_WEIGHT,
     LEAK_LABEL,
+    MAIN_VERSION,
     MAX_DIGS_THIS_WEEK,
     MODEL1_PROBABILITY_PATH,
     MODEL1_PROBABILITY_SUMMARY_PATH,
@@ -52,13 +53,13 @@ from src.config import (
     SIGNATURE_WIDTH_TOLERANCE_OCTAVES,
     SMOOTHING_PSEUDO_COUNTS,
     STEADINESS_WEIGHT,
-    TABLE_DIR,
+    TABLE_DECIMALS,
 )
 from src.measure_band_evenness import compute_band_evenness
 from src.measure_band_geometry import measure_band_geometry
+from src.utils import make_output_dirs
 
 PRIOR_ODDS = HISTORICAL_LEAK_RATE / (1 - HISTORICAL_LEAK_RATE)
-MAIN_VERSION = 'floor'
 SIGNATURE_PROPERTIES = ('persistent_over_time', 'stands_out',
                         'even_across_band', 'leak_like_width',
                         'gap_above_background')
@@ -218,7 +219,7 @@ def build_dig_list(summary):
     return picks + [INFORMATIVE_DIG_SITE]
 
 
-def write_summary(lr_table, summary, dig_list, reference, weights):
+def _write_summary(lr_table, summary, dig_list, reference, weights):
     """Plain-language Markdown summary."""
     lines = ['# Model 1 probabilities: presence first, then quality', '',
              f'- {ANALYSIS_EXCLUSION_REASON} No prediction for U40.',
@@ -273,9 +274,9 @@ def run_model1_probabilities():
     dig_list = build_dig_list(summary)
     summary['dig_priority'] = summary['clip_id'].map(
         {clip_id: rank for rank, clip_id in enumerate(dig_list, start=1)})
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    summary.round(4).to_csv(MODEL1_PROBABILITY_PATH, index=False)
-    write_summary(lr_table, summary, dig_list, reference, weights)
+    make_output_dirs()
+    summary.round(TABLE_DECIMALS).to_csv(MODEL1_PROBABILITY_PATH, index=False)
+    _write_summary(lr_table, summary, dig_list, reference, weights)
     return summary, dig_list
 
 

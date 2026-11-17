@@ -1,14 +1,15 @@
 """SANITY CHECK ONLY. Compare the final PVC calls with the literature view.
 
-Reads the model's PVC probabilities (outputs/tables/model1_probabilities
-.csv) and the literature-based reading of each PVC site
-(outputs/tables/sanity_pvc_sites_vs_prediction.csv, from
+Reads the model's PVC probabilities
+(outputs/tables/3_model1/model1_probabilities.csv) and the literature-based
+reading of each PVC site
+(outputs/tables/5_checks/sanity_pvc_sites_vs_prediction.csv, from
 sanity_predict_pvc_leak.py). Nothing here feeds the model.
 
 For each PVC site, it states whether the model call and the literature
 reading agree, and why they may not.
 
-Output: outputs/tables/sanity_pvc_vs_model_calls.csv
+Output: outputs/tables/5_checks/sanity_pvc_vs_model_calls.csv
 """
 import pandas as pd
 
@@ -17,6 +18,7 @@ from src.config import (
     MODEL1_PROBABILITY_PATH,
     SANITY_PVC_SITE_TABLE_PATH,
     SANITY_PVC_VS_MODEL_PATH,
+    TABLE_DECIMALS,
 )
 
 AT_FLOOR = 'at floor'
@@ -59,7 +61,7 @@ def compare_pvc_calls():
                                         merged['reading'])]
     merged['above_base_rate'] = merged['confidence'] > HISTORICAL_LEAK_RATE
     merged = merged.sort_values('confidence', ascending=False)
-    merged.round(3).to_csv(SANITY_PVC_VS_MODEL_PATH, index=False)
+    merged.round(TABLE_DECIMALS).to_csv(SANITY_PVC_VS_MODEL_PATH, index=False)
     return merged
 
 

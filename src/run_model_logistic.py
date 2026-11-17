@@ -20,9 +20,9 @@ is kept as curve_probability.
 
 Outputs
 -------
-outputs/tables/model2_fits.csv
-outputs/tables/model2_probabilities.csv
-outputs/tables/model2_summary.md
+outputs/tables/4_model2/model2_fits.csv
+outputs/tables/4_model2/model2_probabilities.csv
+outputs/tables/4_model2/model2_summary.md
 """
 import numpy as np
 import pandas as pd
@@ -30,23 +30,24 @@ import pandas as pd
 from src.config import (
     ANALYSIS_EXCLUDED_CLIPS,
     ANALYSIS_EXCLUSION_REASON,
+    DUG_LABELS,
     FIRTH_MAX_ITERATIONS,
     FIRTH_TOLERANCE,
     HISTORICAL_LEAK_RATE,
     LEAK_LABEL,
+    MAIN_VERSION,
     MODEL1_PROBABILITY_PATH,
     MODEL1_SCORES_PATH,
     MODEL2_FITS_PATH,
     MODEL2_PROBABILITY_PATH,
     MODEL2_SUMMARY_PATH,
-    NO_LEAK_LABEL,
-    TABLE_DIR,
+    MODEL_VERSIONS,
+    SUMMARY_TABLE_ROWS,
+    TABLE_DECIMALS,
 )
+from src.utils import make_output_dirs
 
-VERSIONS = ('floor', 'raw')
-MAIN_VERSION = 'floor'
 FULL_FIT = 'all six'
-DUG_LABELS = (LEAK_LABEL, NO_LEAK_LABEL)
 PRIOR_LOG_ODDS = np.log(HISTORICAL_LEAK_RATE / (1 - HISTORICAL_LEAK_RATE))
 MAX_NEWTON_STEP = 5.0   # caps each update; keeps early iterations stable
 
@@ -85,7 +86,7 @@ def fit_firth_logistic(x, y):
 def fit_all(scores):
     """The 14 fits: two versions x (all dug sites, each left out)."""
     rows = []
-    for version in VERSIONS:
+    for version in MODEL_VERSIONS:
         dug = scores[(scores['version'] == version)
                      & (scores['ranking'] == 'cast_iron')
                      & scores['label_group'].isin(DUG_LABELS)]
@@ -168,7 +169,7 @@ def held_out_check(scores, fits):
     return pd.DataFrame(rows)
 
 
-def write_summary(fits, summary, held_out, model1):
+def _write_summary(fits, summary, held_out, model1):
     """Plain-language Markdown summary with a Model 1 comparison."""
     full = fits[(fits['version'] == MAIN_VERSION)
                 & (fits['held_out'] == FULL_FIT)].iloc[0]
@@ -197,13 +198,15 @@ def write_summary(fits, summary, held_out, model1):
         model1[['clip_id', 'confidence']].rename(
             columns={'confidence': 'model1_confidence'}), on='clip_id')
     comparison = comparison.sort_values('confidence', ascending=False)
-    lines += ['', '## Model 2 vs. Model 1 (top 12 by Model 2)', '',
+    lines += ['',
+              f'## Model 2 vs. Model 1 (top {SUMMARY_TABLE_ROWS} by Model 2)',
+              '',
               '| Site | Pipe | Score | Model 2 | Model 2 range | Model 1 |',
               '|---|---|---|---|---|---|']
     lines += [f'| {r.clip_id} | {r.ranking} | {r.score:.1f} | '
               f'{r.confidence:.0%} | {r.probability_low:.0%}-'
               f'{r.probability_high:.0%} | {r.model1_confidence:.0%} |'
-              for r in comparison.head(12).itertuples()]
+              for r in comparison.head(SUMMARY_TABLE_ROWS).itertuples()]
     MODEL2_SUMMARY_PATH.write_text('\n'.join(lines) + '\n',
                                    encoding='utf-8')
 
@@ -216,11 +219,11 @@ def run_model_two():
     summary = apply_pvc_discount(site_probabilities(scores, fits),
                                  pd.read_csv(MODEL1_PROBABILITY_PATH))
     held_out = held_out_check(scores, fits)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    fits.round(4).to_csv(MODEL2_FITS_PATH, index=False)
-    summary.round(4).to_csv(MODEL2_PROBABILITY_PATH, index=False)
-    write_summary(fits, summary, held_out,
-                  pd.read_csv(MODEL1_PROBABILITY_PATH))
+    make_output_dirs()
+    fits.round(TABLE_DECIMALS).to_csv(MODEL2_FITS_PATH, index=False)
+    summary.round(TABLE_DECIMALS).to_csv(MODEL2_PROBABILITY_PATH, index=False)
+    _write_summary(fits, summary, held_out,
+                   pd.read_csv(MODEL1_PROBABILITY_PATH))
     return fits, summary, held_out
 
 

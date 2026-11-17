@@ -19,7 +19,7 @@ whole-clip spectrum, for every scorable site:
 Cast-iron sites use the 400-1,300 Hz band; PVC sites the 250-400 Hz band
 (120 Hz hum lines removed), as in Model 1. Check only; not a model input.
 
-Output: outputs/tables/band_evenness.csv
+Output: outputs/tables/2_eda/band_evenness.csv
 """
 import numpy as np
 import pandas as pd
@@ -32,7 +32,8 @@ from src.config import (
     MODEL1_PROBABILITY_PATH,
     MODEL1_SCORES_PATH,
     PERSISTENCE_CONTRAST_DB,
-    TABLE_DIR,
+    POWER_TO_DB,
+    TABLE_DECIMALS,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.run_model_knowledge_score import (
@@ -41,20 +42,14 @@ from src.run_model_knowledge_score import (
     derive_leak_band,
     pvc_bands,
 )
-
-POWER_TO_DB = 10
-
-
-def _in_band(frequencies_hz, band_hz):
-    low_hz, high_hz = band_hz
-    return (frequencies_hz > low_hz) & (frequencies_hz <= high_hz)
+from src.utils import in_band, make_output_dirs
 
 
 def evenness(spectrum_db, frequencies_hz, band_hz, neighbors_hz):
     """Three evenness measures for one site's band."""
-    band_db = spectrum_db[_in_band(frequencies_hz, band_hz)]
+    band_db = spectrum_db[in_band(frequencies_hz, band_hz)]
     neighbor_level_db = np.mean([
-        np.median(spectrum_db[_in_band(frequencies_hz, edges)])
+        np.median(spectrum_db[in_band(frequencies_hz, edges)])
         for edges in neighbors_hz])
     band_power = np.maximum(10 ** (band_db / POWER_TO_DB), np.finfo(
         float).tiny)
@@ -103,8 +98,8 @@ def measure_band_evenness():
         ['clip_id', 'prediction']]
     table = table.merge(scores, on='clip_id').merge(
         predictions, on='clip_id', how='left')
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    table.round(3).to_csv(BAND_EVENNESS_PATH, index=False)
+    make_output_dirs()
+    table.round(TABLE_DECIMALS).to_csv(BAND_EVENNESS_PATH, index=False)
     return table
 
 

@@ -9,9 +9,9 @@ little six labeled sites can reveal about a rule's accuracy.
 
 Outputs
 -------
-outputs/tables/base_rate_ppv_scenarios.csv
-outputs/tables/base_rate_summary.md
-outputs/figures/eda/eda_17_base_rate_false_alarms.png
+outputs/tables/1_quality/base_rate_ppv_scenarios.csv
+outputs/tables/1_quality/base_rate_summary.md
+outputs/figures/1_eda/eda_17_base_rate_false_alarms.png
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,13 +27,15 @@ from src.config import (
     MAX_DIGS_THIS_WEEK,
     N_LABELED_EXPECTED,
     N_UNLABELED_EXPECTED,
-    TABLE_DIR,
+    TABLE_DECIMALS,
 )
 from src.load_recordings import load_metadata
 from src.plot_style import (
+    ANNOTATION_FONT_SIZE,
     CRIME_LAB_GOLD,
     HEALTH_LAB_TEAL,
     PANEL_GREY,
+    SMALL_FONT_SIZE,
     TEXT_DARK,
     UCHICAGO_MAROON,
     UNLABELED_GREY,
@@ -41,6 +43,7 @@ from src.plot_style import (
     apply_urban_labs_style,
     finish_and_save,
 )
+from src.utils import make_output_dirs
 
 SENSITIVITIES = (0.5, 0.7, 0.8, 0.9)
 SPECIFICITIES = (0.7, 0.8, 0.9, 0.95)
@@ -52,7 +55,7 @@ ILLUSTRATION_FALSE_POSITIVES = 4
 ILLUSTRATION_SENSITIVITY = 0.8
 SPECIFICITY_CURVE = np.linspace(0.5, 0.995, 200)
 WAFFLE_COLUMNS = 8
-FIGURE_SIZE = (7.5, 4.4)
+BASE_RATE_FIGURE_SIZE = (7.5, 4.4)
 
 
 def positive_predictive_value(sensitivity, specificity, prevalence):
@@ -111,7 +114,7 @@ def summarize_validation_limits():
     }
 
 
-def write_summary(ppv_table, blind, limits, labeled_prevalence):
+def _write_summary(ppv_table, blind, limits, labeled_prevalence):
     """Plain-language Markdown summary of the base-rate arithmetic."""
     example = ppv_table[(ppv_table['sensitivity'] == 0.8)
                         & (ppv_table['specificity'] == 0.9)].iloc[0]
@@ -167,7 +170,7 @@ def _draw_ppv_curves(ax, labeled_prevalence):
     ax.set_xlim(SPECIFICITY_CURVE[0], 1)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f'{v:.0%}'))
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f'{v:.0%}'))
-    ax.legend(loc='lower right', fontsize=7)
+    ax.legend(loc='lower right', fontsize=SMALL_FONT_SIZE)
     ax.set_title(f'A rule that catches {ILLUSTRATION_SENSITIVITY:.0%} of '
                  'leaks', loc='left')
 
@@ -198,7 +201,7 @@ def _draw_waffle(ax):
     ax.legend(handles=[Patch(facecolor=color, edgecolor=UNLABELED_GREY,
                              label=label) for label, color in legend_order],
               loc='upper center', bbox_to_anchor=(0.5, -0.02), ncol=2,
-              fontsize=6.5)
+              fontsize=ANNOTATION_FONT_SIZE)
     n_flagged = ILLUSTRATION_TRUE_POSITIVES + ILLUSTRATION_FALSE_POSITIVES
     n_false = ILLUSTRATION_FALSE_POSITIVES
     ax.set_title(f'Of 40 undug sites (~{n_leaks} leaks), it flags '
@@ -210,7 +213,8 @@ def plot_base_rate_figure(labeled_prevalence):
     """Fig 17 (LAY). False alarms compound when leaks are rare."""
     apply_urban_labs_style()
     fig, (curve_ax, waffle_ax) = plt.subplots(
-        1, 2, figsize=FIGURE_SIZE, gridspec_kw={'width_ratios': [1.15, 1]})
+        1, 2, figsize=BASE_RATE_FIGURE_SIZE,
+        gridspec_kw={'width_ratios': [1.15, 1]})
     _draw_ppv_curves(curve_ax, labeled_prevalence)
     _draw_waffle(waffle_ax)
     fig.subplots_adjust(wspace=0.3)
@@ -234,11 +238,11 @@ def run_base_rate_analysis():
     labeled_prevalence = metadata.loc[metadata['is_labeled'],
                                       'is_leak'].astype(float).mean()
     ppv_table = build_ppv_table(labeled_prevalence)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    ppv_table.round(3).to_csv(BASE_RATE_TABLE_PATH, index=False)
+    make_output_dirs()
+    ppv_table.round(TABLE_DECIMALS).to_csv(BASE_RATE_TABLE_PATH, index=False)
     blind = summarize_blind_digging()
     limits = summarize_validation_limits()
-    write_summary(ppv_table, blind, limits, labeled_prevalence)
+    _write_summary(ppv_table, blind, limits, labeled_prevalence)
     return plot_base_rate_figure(labeled_prevalence)
 
 

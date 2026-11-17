@@ -1,0 +1,7 @@
+held_out,label_group,band_low_hz,band_high_hz,held_out_score,undug_scoring_higher
+L01,leak,396.0,1304.0,15.2512,0
+L02,no_leak,400.0,1300.0,0.1896,5
+L03,leak,396.0,1304.0,21.151,0
+L04,no_leak,400.0,1300.0,0.1763,5
+L05,no_leak,400.0,1300.0,0.085,10
+L06,leak,400.0,1300.0,10.9447,0

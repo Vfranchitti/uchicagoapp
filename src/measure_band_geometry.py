@@ -8,7 +8,7 @@ compares them with the top of the background shelf: the gap between the
 two, the ratio of band edges to the shelf edge, and the band's width in
 octaves. Only pilot data are used.
 
-Output: outputs/tables/band_geometry.csv
+Output: outputs/tables/2_eda/band_geometry.csv
 """
 import numpy as np
 import pandas as pd
@@ -23,10 +23,10 @@ from src.compute_clip_features import (
     build_clip_feature_table,
     remove_hum_lines,
 )
-from src.config import LEAK_LABEL, NYQUIST_HZ, TABLE_DIR
+from src.config import BAND_GEOMETRY_PATH, LEAK_LABEL, NYQUIST_HZ
 from src.load_recordings import load_all_amplitudes, load_metadata
+from src.utils import make_output_dirs, moving_average
 
-BAND_GEOMETRY_PATH = TABLE_DIR / 'band_geometry.csv'
 PVC_BAND_CLIPS = ('U34', 'U15')
 # Search above the logger's low shelf for the contrasting band.
 BAND_SEARCH_HZ = (250, NYQUIST_HZ)
@@ -36,13 +36,7 @@ EDGE_LEVEL_FRACTION = 0.5
 SHELF_LOW_PLATEAU_HZ = (50, 250)
 SHELF_HIGH_PLATEAU_HZ = (500, 1500)
 SHELF_SEARCH_HZ = (200, 500)
-SMOOTHING_BINS = 3
-
-
-def _smooth(values):
-    """Short moving average to steady the edge estimates."""
-    kernel = np.ones(SMOOTHING_BINS) / SMOOTHING_BINS
-    return np.convolve(values, kernel, mode='same')
+EDGE_SMOOTHING_BINS = 3
 
 
 def _band_mask(frequencies_hz, band_hz):
@@ -53,7 +47,7 @@ def _band_mask(frequencies_hz, band_hz):
 def find_shelf_edge_hz(baseline_db):
     """Pitch where the logger floor steps down from its low shelf."""
     frequencies_hz = baseline_db.index.to_numpy()
-    values = _smooth(baseline_db.to_numpy())
+    values = moving_average(baseline_db.to_numpy(), EDGE_SMOOTHING_BINS)
     midpoint = (np.median(values[_band_mask(frequencies_hz,
                                             SHELF_LOW_PLATEAU_HZ)])
                 + np.median(values[_band_mask(frequencies_hz,
@@ -66,8 +60,8 @@ def find_shelf_edge_hz(baseline_db):
 def find_band(excess_row):
     """Edges (Hz) and median level (dB) of the strongest contiguous band."""
     frequencies_hz = excess_row.index.to_numpy()
-    values = _smooth(remove_hum_lines(frequencies_hz,
-                                      excess_row.to_numpy()))
+    hum_free = remove_hum_lines(frequencies_hz, excess_row.to_numpy())
+    values = moving_average(hum_free, EDGE_SMOOTHING_BINS)
     in_search = _band_mask(frequencies_hz, BAND_SEARCH_HZ)
     peak_index = np.flatnonzero(in_search)[np.argmax(values[in_search])]
     threshold = values[peak_index] * EDGE_LEVEL_FRACTION
@@ -117,7 +111,7 @@ def measure_band_geometry():
             'band_width_octaves': round(np.log2(high_hz / low_hz), 2),
         })
     geometry = pd.DataFrame(rows)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
+    make_output_dirs()
     geometry.to_csv(BAND_GEOMETRY_PATH, index=False)
     return geometry
 

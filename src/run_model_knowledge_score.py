@@ -20,11 +20,11 @@ dug sites; agreement with the clustering; floor vs. raw.
 
 Outputs
 -------
-outputs/tables/model1_scores.csv
-outputs/tables/model1_leave_one_out.csv
-outputs/tables/model1_summary.md
-outputs/figures/model/model1_cast_iron_ranking.png
-outputs/figures/model/model1_pvc_ranking.png
+outputs/tables/3_model1/model1_scores.csv
+outputs/tables/3_model1/model1_leave_one_out.csv
+outputs/tables/3_model1/model1_summary.md
+outputs/figures/2_model/model1_cast_iron_ranking.png
+outputs/figures/2_model/model1_pvc_ranking.png
 """
 from itertools import product
 
@@ -48,14 +48,15 @@ from src.config import (
     ANALYSIS_EXCLUDED_CLIPS,
     ANALYSIS_EXCLUSION_REASON,
     CLUSTER_TABLE_PATH,
+    DUG_LABELS,
     EXCESS_BANDS_HZ,
-    FIGURE_DPI,
     LEAK_LABEL,
     MAX_DIGS_THIS_WEEK,
     MODEL1_LOO_PATH,
     MODEL1_SCORES_PATH,
     MODEL1_SUMMARY_PATH,
     MODEL_FIGURE_DIR,
+    MODEL_VERSIONS,
     NO_LEAK_LABEL,
     NYQUIST_HZ,
     PERSISTENCE_CONTRAST_DB,
@@ -65,22 +66,25 @@ from src.config import (
     SAMPLE_RATE_HZ,
     SPECTROGRAM_OVERLAP_SAMPLES,
     SPECTROGRAM_SEGMENT_SAMPLES,
-    TABLE_DIR,
+    TABLE_DECIMALS,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.measure_band_geometry import find_band
 from src.plot_style import (
+    ANNOTATION_FONT_SIZE,
     HEALTH_LAB_NAVY,
     LABEL_COLORS,
+    LIGHT_GRID_GREY,
+    MICRO_FONT_SIZE,
     TEXT_DARK,
     TEXT_GREY,
     add_title_and_note,
     apply_urban_labs_style,
+    save_figure,
 )
+from src.run_clustering import leak_cluster_members
+from src.utils import in_band, make_output_dirs, to_db
 
-POWER_TO_DB = 10
-VERSIONS = ('floor', 'raw')
-DUG_LABELS = (LEAK_LABEL, NO_LEAK_LABEL)
 # Lower neighbor of the cast-iron band starts above the logger's low shelf.
 CAST_IRON_LOWER_NEIGHBOR_START_HZ = 250
 GROUP_COLORS = {**LABEL_COLORS, 'unlabeled': HEALTH_LAB_NAVY}
@@ -91,16 +95,12 @@ PVC_FIGURE = (7.5, 4.2)
 # ---------------------------------------------------------------------------
 # Spectra
 # ---------------------------------------------------------------------------
-def _to_db(power):
-    return POWER_TO_DB * np.log10(power + np.finfo(float).tiny)
-
-
 def compute_spectrogram_db(amplitude):
     """(frequencies_hz, dB array of shape frequency x frame)."""
     frequencies_hz, _, power = signal.spectrogram(
         amplitude, fs=SAMPLE_RATE_HZ, nperseg=SPECTROGRAM_SEGMENT_SAMPLES,
         noverlap=SPECTROGRAM_OVERLAP_SAMPLES)
-    return frequencies_hz, _to_db(power)
+    return frequencies_hz, to_db(power)
 
 
 def build_spectral_inputs(metadata, amplitudes):
@@ -138,19 +138,14 @@ def build_spectral_inputs(metadata, amplitudes):
 # ---------------------------------------------------------------------------
 # Rule
 # ---------------------------------------------------------------------------
-def _in_band(frequencies_hz, band_hz):
-    low_hz, high_hz = band_hz
-    return (frequencies_hz > low_hz) & (frequencies_hz <= high_hz)
-
-
 def band_contrast(values, frequencies_hz, band_hz, neighbors_hz):
     """Median dB in band minus the mean of the neighbors' medians.
 
     values may be a 1-D spectrum or a frequency x frame array (returns one
     contrast per frame).
     """
-    band = np.median(values[_in_band(frequencies_hz, band_hz)], axis=0)
-    neighbors = [np.median(values[_in_band(frequencies_hz, edges)], axis=0)
+    band = np.median(values[in_band(frequencies_hz, band_hz)], axis=0)
+    neighbors = [np.median(values[in_band(frequencies_hz, edges)], axis=0)
                  for edges in neighbors_hz]
     return band - np.mean(neighbors, axis=0)
 
@@ -257,20 +252,19 @@ def leave_one_out(metadata, inputs, cast_iron_sites):
             fold_tables)
 
 
-def leak_cluster_members(metadata):
-    """Undug clips sharing a cluster with most dug leaks, per setting."""
+def leak_clusters_by_setting(metadata):
+    """Undug clips sharing a cluster with most dug leaks, per setting.
+
+    Reads the saved clustering run on all recordings and applies
+    run_clustering.leak_cluster_members to each k-means / Ward setting.
+    """
     assignments = pd.read_csv(CLUSTER_TABLE_PATH)
-    assignments = assignments[assignments['run'] == 'all'].merge(
-        metadata[['clip_id', 'label_group']], on='clip_id')
-    members = {}
-    for column in [c for c in assignments.columns
-                   if c.startswith(('kmeans_', 'ward_'))]:
-        majority = assignments.loc[assignments['label_group']
-                                   == LEAK_LABEL, column].mode().iloc[0]
-        members[column] = set(assignments.loc[
-            (assignments[column] == majority)
-            & (assignments['label_group'] == 'unlabeled'), 'clip_id'])
-    return members
+    assignments = assignments[assignments['run'] == 'all'].drop(
+        columns='run')
+    sites = metadata[['clip_id', 'label_group']]
+    return {column: set(leak_cluster_members(sites, assignments, column)[1])
+            for column in assignments.columns
+            if column.startswith(('kmeans_', 'ward_'))}
 
 
 def top_undug(scores, n_sites=MAX_DIGS_THIS_WEEK):
@@ -286,7 +280,7 @@ def compare_versions(scores, ranking):
     wide = subset.pivot(index='clip_id', columns='version', values='score')
     rho = stats.spearmanr(wide['floor'], wide['raw']).statistic
     top = {version: top_undug(subset[subset['version'] == version])
-           for version in VERSIONS}
+           for version in MODEL_VERSIONS}
     return rho, top
 
 
@@ -314,10 +308,10 @@ def plot_ranking(scores, fold_spread, title, figure_number, note, file_stem,
         if record.persistence < PERSISTENCE_CUTOFF:
             ax.text(max(record.contrast_db, record.score, 0) + 0.3,
                     position, f'present {record.persistence:.0%}',
-                    va='center', fontsize=5.5, color=TEXT_GREY)
+                    va='center', fontsize=MICRO_FONT_SIZE, color=TEXT_GREY)
     ax.set_yticks(positions)
     labels = [f'{r.clip_id} ({r.logger_model})' for r in ordered.itertuples()]
-    ax.set_yticklabels(labels, fontsize=6.5)
+    ax.set_yticklabels(labels, fontsize=ANNOTATION_FONT_SIZE)
     for tick, group in zip(ax.get_yticklabels(), ordered['label_group']):
         if group in DUG_LABELS:
             tick.set_color(LABEL_COLORS[group])
@@ -325,7 +319,7 @@ def plot_ranking(scores, fold_spread, title, figure_number, note, file_stem,
     ax.axvline(0, color=TEXT_GREY, linewidth=0.6)
     ax.set_xlabel('Score (dB the band stands out, after persistence gate)')
     ax.grid(axis='y', visible=False)
-    ax.grid(axis='x', color='#EFEFEF')
+    ax.grid(axis='x', color=LIGHT_GRID_GREY)
     groups_present = set(ordered['label_group'])
     ax.legend(handles=[Patch(color=GROUP_COLORS[g], label=name) for g, name
                        in (('unlabeled', 'Not yet dug'),
@@ -334,21 +328,17 @@ def plot_ranking(scores, fold_spread, title, figure_number, note, file_stem,
                        if g in groups_present]
               + [Patch(color=HEALTH_LAB_NAVY, alpha=0.25,
                        label='Before persistence gate')],
-              loc='lower right', fontsize=6.5)
+              loc='lower right', fontsize=ANNOTATION_FONT_SIZE)
     bottom = add_title_and_note(fig, figure_number, title, note)
     fig.subplots_adjust(top=0.93, bottom=bottom, left=0.13)
-    MODEL_FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = MODEL_FIGURE_DIR / f'{file_stem}.png'
-    fig.savefig(output_path, dpi=FIGURE_DPI)
-    plt.close(fig)
-    return output_path
+    return save_figure(fig, MODEL_FIGURE_DIR, file_stem)
 
 
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
-def write_summary(scores, leak_band_hz, loo_table, cluster_members,
-                  version_comparison, floor_persistence):
+def _write_summary(scores, leak_band_hz, loo_table, cluster_members,
+                   version_comparison, floor_persistence):
     """Plain-language Markdown summary of Model 1 and its checks."""
     lines = ['# Model 1: knowledge-based score', '',
              f'- {ANALYSIS_EXCLUSION_REASON}',
@@ -360,7 +350,7 @@ def write_summary(scores, leak_band_hz, loo_table, cluster_members,
              f' median {np.median(floor_persistence):.2f}, max '
              f'{np.max(floor_persistence):.2f}.', '']
     for ranking in ('cast_iron', 'pvc'):
-        for version in VERSIONS:
+        for version in MODEL_VERSIONS:
             subset = scores[(scores['ranking'] == ranking)
                             & (scores['version'] == version)]
             lines.append(f'## {ranking} - {version} version')
@@ -407,9 +397,9 @@ def run_model_one():
     scores = pd.concat(
         [score_group(cast_iron_sites, inputs, version,
                      *cast_iron_bands(leak_band_hz), False, 'cast_iron')
-         for version in VERSIONS]
+         for version in MODEL_VERSIONS]
         + [score_group(pvc_sites, inputs, version, *pvc_bands(), True,
-                       'pvc') for version in VERSIONS],
+                       'pvc') for version in MODEL_VERSIONS],
         ignore_index=True)
     loo_table, fold_scores, _ = leave_one_out(metadata, inputs,
                                               cast_iron_sites)
@@ -420,14 +410,14 @@ def run_model_one():
         scores['clip_id'].isin(floor_ids)
         & (scores['ranking'] == 'cast_iron')
         & (scores['version'] == 'floor'), 'persistence']
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    scores.round(3).to_csv(MODEL1_SCORES_PATH, index=False)
-    loo_table.round(2).to_csv(MODEL1_LOO_PATH, index=False)
+    make_output_dirs()
+    scores.round(TABLE_DECIMALS).to_csv(MODEL1_SCORES_PATH, index=False)
+    loo_table.round(TABLE_DECIMALS).to_csv(MODEL1_LOO_PATH, index=False)
     version_comparison = {ranking: compare_versions(scores, ranking)
                           for ranking in ('cast_iron', 'pvc')}
-    write_summary(scores, leak_band_hz, loo_table,
-                  leak_cluster_members(metadata), version_comparison,
-                  floor_persistence)
+    _write_summary(scores, leak_band_hz, loo_table,
+                   leak_clusters_by_setting(metadata), version_comparison,
+                   floor_persistence)
     is_floor = scores['version'] == 'floor'
     figure_paths = [
         plot_ranking(

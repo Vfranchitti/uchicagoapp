@@ -21,17 +21,17 @@ Runs:
 
 Outputs
 -------
-outputs/tables/cluster_features.csv
-outputs/tables/cluster_assignments.csv
-outputs/tables/cluster_summary.md
-outputs/figures/eda/eda_20_cluster_dendrogram.png
-outputs/figures/eda/eda_21_cluster_map.png
+outputs/tables/2_eda/cluster_features.csv
+outputs/tables/2_eda/cluster_assignments.csv
+outputs/tables/2_eda/cluster_summary.md
+outputs/figures/1_eda/eda_20_cluster_dendrogram.png
+outputs/figures/1_eda/eda_21_cluster_map.png
 """
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap, to_hex
+from matplotlib.lines import Line2D
 from scipy.cluster.hierarchy import (
     dendrogram,
     fcluster,
@@ -56,28 +56,35 @@ from src.config import (
     CLUSTER_FEATURE_TABLE_PATH,
     CLUSTER_SUMMARY_PATH,
     CLUSTER_TABLE_PATH,
+    DUG_LABELS,
     KMEANS_RANDOM_SEED,
     KMEANS_RESTARTS,
     LEAK_LABEL,
     NO_LEAK_LABEL,
-    TABLE_DIR,
+    TABLE_DECIMALS,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.plot_style import (
+    ANNOTATION_FONT_SIZE,
     CRIME_LAB_GOLD,
     HEALTH_LAB_LIGHT_TEAL,
     HEALTH_LAB_NAVY,
     HEALTH_LAB_TEAL,
     LABEL_COLORS,
+    LIGHT_GRID_GREY,
+    PANEL_TITLE_FONT_SIZE,
     PIPE_MARKERS,
+    SMALL_FONT_SIZE,
     TEXT_DARK,
     TEXT_GREY,
+    TINY_FONT_SIZE,
     UCHICAGO_MAROON,
     UNLABELED_GREY,
     add_title_and_note,
     apply_urban_labs_style,
     finish_and_save,
 )
+from src.utils import make_output_dirs
 
 CLUSTER_FEATURES = {
     'log_typical_loudness': 'Typical loudness (log)',
@@ -91,7 +98,6 @@ RUN_TITLES = {'all': 'All recordings (U40 excluded)',
               'without_floor': 'Without quiet noise-floor clips'}
 CLUSTER_COLORS = (HEALTH_LAB_NAVY, CRIME_LAB_GOLD, HEALTH_LAB_LIGHT_TEAL,
                   '#8C8C8C')
-DUG_LABELS = (LEAK_LABEL, NO_LEAK_LABEL)
 HEATMAP_Z_LIMIT = 2.5
 Z_SCORE_COLORMAP = LinearSegmentedColormap.from_list(
     'teal_white_maroon', [HEALTH_LAB_TEAL, '#FFFFFF', UCHICAGO_MAROON])
@@ -200,7 +206,7 @@ def leak_cluster_members(df, assignments, column):
     return int(majority), members['clip_id'].tolist()
 
 
-def write_summary(results):
+def _write_summary(results):
     """Plain-language summary of both runs."""
     lines = ['# Cluster analysis (unsupervised check)', '',
              f'- {ANALYSIS_EXCLUSION_REASON}',
@@ -278,7 +284,8 @@ def plot_dendrogram_with_profiles(result):
     tree_ax.axhline(cut_height, color=TEXT_GREY, linestyle='--',
                     linewidth=0.8)
     tree_ax.text(tree_ax.get_xlim()[1], cut_height, f'  cut: {best_k} groups',
-                 va='center', ha='left', fontsize=7, color=TEXT_GREY)
+                 va='center', ha='left', fontsize=SMALL_FONT_SIZE,
+                 color=TEXT_GREY)
     tree_ax.set_ylabel('Ward linkage distance')
     tree_ax.set_xticks([])
     tree_ax.grid(False)
@@ -288,10 +295,11 @@ def plot_dendrogram_with_profiles(result):
                    vmin=-HEATMAP_Z_LIMIT, vmax=HEATMAP_Z_LIMIT,
                    interpolation='nearest')
     heat_ax.set_yticks(range(len(CLUSTER_FEATURES)))
-    heat_ax.set_yticklabels(list(CLUSTER_FEATURES.values()), fontsize=7)
+    heat_ax.set_yticklabels(list(CLUSTER_FEATURES.values()),
+                            fontsize=SMALL_FONT_SIZE)
     heat_ax.set_xticks(range(len(leaf_order)))
     heat_ax.set_xticklabels(df['clip_id'].iloc[leaf_order], rotation=90,
-                            fontsize=6)
+                            fontsize=TINY_FONT_SIZE)
     _color_dug_tick_labels(heat_ax.get_xticklabels(),
                            df.set_index('clip_id')['label_group'].to_dict())
     heat_ax.grid(False)
@@ -334,15 +342,16 @@ def _draw_cluster_map(ax, result):
         ax.annotate(record.clip_id, (record.leak_band_contrast_db,
                                      record.leak_band_level_variability_db),
                     xytext=(4, 3), textcoords='offset points',
-                    fontsize=6.5 if is_dug else 5.5,
+                    fontsize=ANNOTATION_FONT_SIZE if is_dug else 5.5,
                     color=(LABEL_COLORS[record.label_group] if is_dug
                            else TEXT_GREY),
                     fontweight='bold' if is_dug else 'normal', zorder=5)
     ax.set_xlabel('Leak-band contrast (dB)  → more leak-like')
     ax.set_ylabel('Leak-band unsteadiness (dB)  ↑ less steady')
     ax.set_title(f'{RUN_TITLES[result["run"]]}: {best_k} groups '
-                 f'(n = {len(df)})', loc='left', fontsize=8)
-    ax.grid(axis='x', color='#EFEFEF')
+                 f'(n = {len(df)})', loc='left',
+                 fontsize=PANEL_TITLE_FONT_SIZE)
+    ax.grid(axis='x', color=LIGHT_GRID_GREY)
 
 
 def plot_cluster_maps(results):
@@ -364,7 +373,7 @@ def plot_cluster_maps(results):
                   for g, name in ((LEAK_LABEL, 'Dug: leak'),
                                   (NO_LEAK_LABEL, 'Dug: no leak'))])
     fig.legend(handles=handles, loc='upper center', ncol=len(handles),
-               bbox_to_anchor=(0.5, 0.9), fontsize=6.5)
+               bbox_to_anchor=(0.5, 0.9), fontsize=ANNOTATION_FONT_SIZE)
     fig.subplots_adjust(wspace=0.08)
     bottom = add_title_and_note(
         fig, 21, 'Where the dug sites fall among the clusters',
@@ -384,8 +393,9 @@ def run_clustering():
     metadata = load_metadata()
     amplitudes = load_all_amplitudes(metadata)
     cluster_table = build_cluster_feature_table(metadata, amplitudes)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    cluster_table.round(4).to_csv(CLUSTER_FEATURE_TABLE_PATH, index=False)
+    make_output_dirs()
+    cluster_table.round(TABLE_DECIMALS).to_csv(CLUSTER_FEATURE_TABLE_PATH,
+                                               index=False)
     results, assignment_tables = {}, []
     for run in RUNS:
         df = select_run(cluster_table, run)
@@ -396,7 +406,7 @@ def run_clustering():
                         'ward_tree': ward_tree}
         assignment_tables.append(assignments.assign(run=run))
     pd.concat(assignment_tables).to_csv(CLUSTER_TABLE_PATH, index=False)
-    write_summary(results)
+    _write_summary(results)
     return [plot_dendrogram_with_profiles(results['all']),
             plot_cluster_maps(results)]
 

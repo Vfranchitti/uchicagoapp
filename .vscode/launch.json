@@ -3,6 +3,16 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Run full pipeline (src.run_all)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.run_all",
+            "python": "C:/Users/ValerieFranchitti/.anaconda-desktop/micromamba/envs/cpu/envs/chicago/python.exe",
+            "cwd": "${workspaceFolder}",
+            "env": {"OMP_NUM_THREADS": "1"},
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Run current script (repo root)",
             "type": "debugpy",
             "request": "launch",

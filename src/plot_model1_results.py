@@ -9,7 +9,7 @@ Fig 4 (ACCURATE)       Robustness grid: which sites stay flagged across
 Reads Model 1 outputs (run src/run_model_knowledge_score.py and
 src/compute_model1_probabilities.py first).
 
-Outputs: outputs/figures/model/model1_fig{1..4}_*.png
+Outputs: outputs/figures/2_model/model1_fig{1..4}_*.png
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,7 +21,7 @@ from src.compute_model1_probabilities import has_persistent_band
 from src.config import (
     ANALYSIS_EXCLUDED_CLIPS,
     ANALYSIS_EXCLUSION_REASON,
-    FIGURE_DPI,
+    DUG_LABELS,
     HISTORICAL_LEAK_RATE,
     INFORMATIVE_DIG_SITE,
     LEAK_LABEL,
@@ -39,32 +39,40 @@ from src.config import (
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.plot_style import (
+    ANNOTATION_FONT_SIZE,
+    BASE_FONT_SIZE,
+    DISPLAY_SMOOTHING_BINS,
     FRESNO_BAND_BLUE,
     HEALTH_LAB_LIGHT_TEAL,
     HEALTH_LAB_NAVY,
     HEALTH_LAB_TEAL,
     LABEL_COLORS,
+    LIGHT_GRID_GREY,
+    MICRO_FONT_SIZE,
     PANEL_GREY,
+    PANEL_TITLE_FONT_SIZE,
+    RANKING_COLORS,
+    RANKING_MARKERS,
+    RANKING_NAMES,
+    SMALL_FONT_SIZE,
     TEXT_DARK,
     TEXT_GREY,
     UCHICAGO_MAROON,
     UNLABELED_GREY,
     add_title_and_note,
     apply_urban_labs_style,
+    save_figure,
 )
 from src.run_model_knowledge_score import (
     band_contrast,
     build_spectral_inputs,
     cast_iron_bands,
     derive_leak_band,
-    leak_cluster_members,
+    leak_clusters_by_setting,
     leave_one_out,
 )
+from src.utils import moving_average
 
-PIPE_COLORS = {'cast_iron': HEALTH_LAB_NAVY, 'pvc': HEALTH_LAB_LIGHT_TEAL}
-PIPE_MARKERS = {'cast_iron': 'o', 'pvc': '^'}
-PIPE_NAMES = {'cast_iron': 'cast iron', 'pvc': 'PVC'}
-DUG_LABELS = (LEAK_LABEL, NO_LEAK_LABEL)
 EXPLAINER_CLIPS = (('L03', LABEL_COLORS[LEAK_LABEL], 'L03 (dug: leak)'),
                    ('U17', HEALTH_LAB_NAVY, 'U17 (not yet dug)'),
                    ('L02', LABEL_COLORS[NO_LEAK_LABEL], 'L02 (dug: no leak)'))
@@ -80,22 +88,8 @@ EXTRA_GRID_ROWS = 4
 DECISION_MAP_LABEL_OFFSETS = {'U34': (4, -12), 'L01': (-6, 6),
                               'L05': (6, -12), 'L02': (5, 5),
                               'U15': (5, -9)}
-SMOOTHING_BINS = 5
 SECONDS_PER_FRAME = (SPECTROGRAM_SEGMENT_SAMPLES
                      - SPECTROGRAM_OVERLAP_SAMPLES) / SAMPLE_RATE_HZ
-
-
-def _save(fig, file_stem):
-    MODEL_FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = MODEL_FIGURE_DIR / f'{file_stem}.png'
-    fig.savefig(output_path, dpi=FIGURE_DPI)
-    plt.close(fig)
-    return output_path
-
-
-def _smooth(values):
-    kernel = np.ones(SMOOTHING_BINS) / SMOOTHING_BINS
-    return np.convolve(values, kernel, mode='same')
 
 
 def _reason(record, is_dig):
@@ -123,31 +117,35 @@ def plot_dig_list(probabilities):
     positions = np.arange(len(rows))[::-1]
     for position, record in zip(positions, rows.itertuples()):
         is_dig = not np.isnan(record.dig_priority)
-        color = PIPE_COLORS[record.ranking] if is_dig else UNLABELED_GREY
+        color = RANKING_COLORS[record.ranking] if is_dig else UNLABELED_GREY
         ax.plot([record.probability_low, record.probability_high],
                 [position, position], color=color, linewidth=5,
                 solid_capstyle='round', alpha=0.45)
         ax.plot(record.confidence, position,
-                marker=PIPE_MARKERS[record.ranking], color=color,
+                marker=RANKING_MARKERS[record.ranking], color=color,
                 markersize=9, markeredgecolor='white')
         prefix = f'{int(record.dig_priority)}. ' if is_dig else 'Next: '
         ax.text(-0.02, position, f'{prefix}{record.clip_id}',
-                ha='right', va='center', fontsize=9, fontweight='bold',
+                ha='right', va='center', fontsize=BASE_FONT_SIZE,
+                fontweight='bold',
                 color=TEXT_DARK if is_dig else TEXT_GREY,
                 transform=ax.get_yaxis_transform())
         ax.text(0.62, position + 0.22,
-                f'{PIPE_NAMES[record.ranking]}, logger {record.logger_model}'
-                f'  |  {record.probability_low:.0%}-'
+                f'{RANKING_NAMES[record.ranking]}, logger '
+                f'{record.logger_model}  |  {record.probability_low:.0%}-'
                 f'{record.probability_high:.0%}',
-                fontsize=7, color=TEXT_DARK, fontweight='bold', va='center')
+                fontsize=SMALL_FONT_SIZE, color=TEXT_DARK, fontweight='bold',
+                va='center')
         ax.text(0.62, position - 0.17, _reason(record, is_dig),
-                fontsize=6.2, color=TEXT_GREY, va='center',
+                fontsize=ANNOTATION_FONT_SIZE, color=TEXT_GREY, va='center',
                 linespacing=1.05)
     ax.axvline(HISTORICAL_LEAK_RATE, color=UCHICAGO_MAROON, linestyle='--',
                linewidth=0.9)
     ax.text(HISTORICAL_LEAK_RATE, len(rows) - 0.35,
-            'typical site\n(1 in 8)', ha='center', va='bottom', fontsize=6.5,
-            color=UCHICAGO_MAROON)
+            'typical site\n(1 in 8)', ha='center', va='bottom',
+            fontsize=ANNOTATION_FONT_SIZE,
+            color=UCHICAGO_MAROON,
+            bbox={'facecolor': 'white', 'edgecolor': 'none', 'pad': 1})
     ax.set_xlim(0, 1.25)
     ax.set_xticks([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
     ax.set_xticklabels([f'{tick:.0%}' for tick in ax.get_xticks()])
@@ -169,7 +167,7 @@ def plot_dig_list(probabilities):
         'falls below a cut-off in the raw-spectrum version. '
         f'{ANALYSIS_EXCLUSION_REASON}')
     fig.subplots_adjust(top=0.88, bottom=bottom, left=0.1, right=0.98)
-    return _save(fig, 'model1_fig1_dig_list')
+    return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig1_dig_list')
 
 
 # ---------------------------------------------------------------------------
@@ -186,23 +184,24 @@ def plot_how_score_works(inputs, leak_band_hz):
         spectrum_ax.axvspan(low_hz, high_hz, color=PANEL_GREY, linewidth=0)
     frequencies_hz = inputs['clip_frequencies_hz']
     for clip_id, color, label in EXPLAINER_CLIPS:
+        spectrum = inputs['clip_db']['floor'].loc[clip_id].to_numpy()
         spectrum_ax.plot(frequencies_hz,
-                         _smooth(inputs['clip_db']['floor']
-                                 .loc[clip_id].to_numpy()),
+                         moving_average(spectrum, DISPLAY_SMOOTHING_BINS),
                          color=color, linewidth=1.1, label=label)
     spectrum_ax.text(np.mean(band_hz), 27, 'leak band', ha='center',
-                     fontsize=7, color=UCHICAGO_MAROON, fontweight='bold')
+                     fontsize=SMALL_FONT_SIZE, color=UCHICAGO_MAROON,
+                     fontweight='bold')
     for low_hz, high_hz in neighbors_hz:
         spectrum_ax.text((low_hz + high_hz) / 2, 27, 'neighbor', ha='center',
-                         fontsize=6.5, color=TEXT_GREY)
+                         fontsize=ANNOTATION_FONT_SIZE, color=TEXT_GREY)
     spectrum_ax.set_xlim(0, NYQUIST_HZ)
     spectrum_ax.set_ylim(-3, 30)
     spectrum_ax.set_xlabel('Pitch (Hz)')
     spectrum_ax.set_ylabel('dB above logger\'s noise floor')
     spectrum_ax.set_title('A. Contrast: does the band stand out?',
-                          loc='left', fontsize=8)
+                          loc='left', fontsize=PANEL_TITLE_FONT_SIZE)
     spectrum_ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.24),
-                       ncol=3, fontsize=6.5)
+                       ncol=3, fontsize=ANNOTATION_FONT_SIZE)
     frame_frequencies_hz = inputs['frame_frequencies_hz']
     for clip_id, color, label in PERSISTENCE_EXAMPLES:
         contrast = band_contrast(inputs['frame_db']['floor'][clip_id],
@@ -214,13 +213,13 @@ def plot_how_score_works(inputs, leak_band_hz):
     time_ax.axhline(PERSISTENCE_CONTRAST_DB, color=TEXT_GREY,
                     linestyle='--', linewidth=0.8)
     time_ax.text(3.6, PERSISTENCE_CONTRAST_DB + 0.6, '"present" line (3 dB)',
-                 fontsize=6.5, color=TEXT_GREY)
+                 fontsize=ANNOTATION_FONT_SIZE, color=TEXT_GREY)
     time_ax.set_xlabel('Seconds into recording')
     time_ax.set_ylabel('Band contrast (dB)')
     time_ax.set_title('B. Persistence: does it ever stop?', loc='left',
-                      fontsize=8)
+                      fontsize=PANEL_TITLE_FONT_SIZE)
     time_ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.24),
-                   ncol=1, fontsize=6.5)
+                   ncol=1, fontsize=ANNOTATION_FONT_SIZE)
     fig.subplots_adjust(wspace=0.32)
     bottom = add_title_and_note(
         fig, 2, 'How the score works: a band that stands out and never stops',
@@ -234,7 +233,7 @@ def plot_how_score_works(inputs, leak_band_hz):
         'proportion.')
     fig.subplots_adjust(top=0.86, bottom=bottom + 0.1, left=0.08,
                         right=0.98)
-    return _save(fig, 'model1_fig2_how_score_works')
+    return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig2_how_score_works')
 
 
 # ---------------------------------------------------------------------------
@@ -248,13 +247,14 @@ def plot_decision_map(scores, probabilities):
                             PERSISTENCE_CUTOFF), 30, 0.2,
                            color=FRESNO_BAND_BLUE, zorder=0, linewidth=0))
     ax.text(23.5, PERSISTENCE_CUTOFF - 0.035, 'persistent band\n(leak-like)',
-            ha='right', va='top', fontsize=7, color=HEALTH_LAB_TEAL,
+            ha='right', va='top', fontsize=SMALL_FONT_SIZE,
+            color=HEALTH_LAB_TEAL,
             fontweight='bold')
-    for ranking, marker in PIPE_MARKERS.items():
+    for ranking, marker in RANKING_MARKERS.items():
         for group in ('unlabeled', NO_LEAK_LABEL, LEAK_LABEL):
             subset = main[(main['ranking'] == ranking)
                           & (main['label_group'] == group)]
-            color = (PIPE_COLORS[ranking] if group == 'unlabeled'
+            color = (RANKING_COLORS[ranking] if group == 'unlabeled'
                      else LABEL_COLORS[group])
             ax.scatter(subset['contrast_db'], subset['persistence'],
                        marker=marker, s=34 if group == 'unlabeled' else 70,
@@ -271,7 +271,7 @@ def plot_decision_map(scores, probabilities):
         ax.annotate(record.clip_id, (record.contrast_db, record.persistence),
                     xytext=DECISION_MAP_LABEL_OFFSETS.get(record.clip_id,
                                                           default_offset),
-                    textcoords='offset points', fontsize=6.5,
+                    textcoords='offset points', fontsize=ANNOTATION_FONT_SIZE,
                     fontweight='bold' if is_dug else 'normal',
                     color=(LABEL_COLORS[record.label_group] if is_dug
                            else TEXT_DARK))
@@ -285,7 +285,7 @@ def plot_decision_map(scores, probabilities):
     ax.set_xlabel('Contrast: how many dB the band stands out above its '
                   'neighbors')
     ax.set_ylabel('Persistence: share of moments\nthe band is present')
-    ax.grid(axis='x', color='#EFEFEF')
+    ax.grid(axis='x', color=LIGHT_GRID_GREY)
     ax.legend(handles=[
         Line2D([], [], marker='o', linestyle='', color=HEALTH_LAB_NAVY,
                label='Cast iron, not dug (400-1,300 Hz band)'),
@@ -295,7 +295,7 @@ def plot_decision_map(scores, probabilities):
             LEAK_LABEL], label='Dug: leak'),
         Line2D([], [], marker='o', linestyle='', color=LABEL_COLORS[
             NO_LEAK_LABEL], label='Dug: no leak')],
-        loc='center left', fontsize=6.5)
+        loc='center left', fontsize=ANNOTATION_FONT_SIZE)
     bottom = add_title_and_note(
         fig, 3, 'The decision map: four cast-iron sites sit with the known '
         'leaks',
@@ -306,7 +306,7 @@ def plot_decision_map(scores, probabilities):
         'leaks, no dug non-leak, four undug cast-iron sites and two PVC '
         f'sites. {ANALYSIS_EXCLUSION_REASON}')
     fig.subplots_adjust(top=0.9, bottom=bottom, left=0.12, right=0.98)
-    return _save(fig, 'model1_fig3_decision_map')
+    return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig3_decision_map')
 
 
 # ---------------------------------------------------------------------------
@@ -356,21 +356,23 @@ def plot_robustness_grid(grid, pipe_by_clip):
                                    linewidth=0.5))
             if np.isnan(value):
                 ax.text(column + 0.46, n_rows - 1 - row + 0.42, 'n/a',
-                        ha='center', va='center', fontsize=5.5,
+                        ha='center', va='center', fontsize=MICRO_FONT_SIZE,
                         color=TEXT_GREY)
     ax.set_xlim(0, n_columns)
     ax.set_ylim(0, n_rows)
     ax.set_xticks(np.arange(n_columns) + 0.46)
-    ax.set_xticklabels(grid.columns, rotation=40, ha='right', fontsize=6.5)
+    ax.set_xticklabels(grid.columns, rotation=40, ha='right',
+                       fontsize=ANNOTATION_FONT_SIZE)
     ax.set_yticks(np.arange(n_rows) + 0.42)
-    ax.set_yticklabels([f'{c} ({PIPE_NAMES[pipe_by_clip[c]]})'
-                        for c in grid.index[::-1]], fontsize=7)
+    ax.set_yticklabels([f'{c} ({RANKING_NAMES[pipe_by_clip[c]]})'
+                        for c in grid.index[::-1]], fontsize=SMALL_FONT_SIZE)
     for boundary in (2, 8):
         ax.axvline(boundary - 0.04, color=TEXT_DARK, linewidth=0.8)
     for position, text in ((1, 'Model 1 version'),
                            (5, 'Leave one dug site out'),
                            (10, 'Clustering (no labels)')):
-        ax.text(position, n_rows + 0.25, text, ha='center', fontsize=7,
+        ax.text(position, n_rows + 0.25, text, ha='center',
+                fontsize=SMALL_FONT_SIZE,
                 fontweight='bold', color=TEXT_DARK)
     ax.tick_params(length=0)
     ax.grid(False)
@@ -382,7 +384,7 @@ def plot_robustness_grid(grid, pipe_by_clip):
                              label='Not flagged'),
                        Patch(color=PANEL_GREY, label='Not applicable')],
               loc='upper center', bbox_to_anchor=(0.5, -0.32), ncol=3,
-              fontsize=6.5)
+              fontsize=ANNOTATION_FONT_SIZE)
     bottom = add_title_and_note(
         fig, 4, 'Which picks survive every check?',
         '"Flagged" means a persistent band (Model 1 columns) or membership '
@@ -394,7 +396,7 @@ def plot_robustness_grid(grid, pipe_by_clip):
         'drops below 90% presence there.')
     fig.subplots_adjust(top=0.85, bottom=bottom + 0.12, left=0.16,
                         right=0.98)
-    return _save(fig, 'model1_fig4_robustness_grid')
+    return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig4_robustness_grid')
 
 
 def make_model1_figures():
@@ -412,7 +414,7 @@ def make_model1_figures():
     cast_iron_sites = metadata[metadata['pipe_material'] == 'cast_iron']
     _, _, fold_tables = leave_one_out(metadata, inputs, cast_iron_sites)
     grid = build_robustness_grid(scores, probabilities, fold_tables,
-                                 leak_cluster_members(metadata))
+                                 leak_clusters_by_setting(metadata))
     pipe_by_clip = scores.drop_duplicates('clip_id').set_index(
         'clip_id')['ranking']
     assert INFORMATIVE_DIG_SITE in grid.index

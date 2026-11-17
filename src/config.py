@@ -2,43 +2,94 @@
 
 Every file path and every number with a physical or policy meaning is
 defined here once and imported elsewhere (Sullivan, "Don't Repeat
-Yourself" and "No magic numbers").
+Yourself" and "No magic numbers"). Sections follow the pipeline order in
+README.md: data -> quality checks -> exploratory analysis -> Model 1 ->
+Model 2 -> robustness and sanity checks.
 """
 from pathlib import Path
 
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# PATHS
+# ===========================================================================
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# Inputs (read-only)
 DATA_DIR = REPO_ROOT / 'data'
 METADATA_PATH = DATA_DIR / 'metadata.csv'
 PREDICTIONS_TEMPLATE_PATH = DATA_DIR / 'predictions_template.csv'
 LABELED_CLIP_DIR = DATA_DIR / 'labeled'
 UNLABELED_CLIP_DIR = DATA_DIR / 'unlabeled'
 
+# Output folders, one per pipeline stage
 OUTPUT_DIR = REPO_ROOT / 'outputs'
+DELIVERABLES_DIR = OUTPUT_DIR / 'deliverables'
 TABLE_DIR = OUTPUT_DIR / 'tables'
-EDA_FIGURE_DIR = OUTPUT_DIR / 'figures' / 'eda'
+QUALITY_TABLE_DIR = TABLE_DIR / '1_quality'
+EDA_TABLE_DIR = TABLE_DIR / '2_eda'
+MODEL1_TABLE_DIR = TABLE_DIR / '3_model1'
+MODEL2_TABLE_DIR = TABLE_DIR / '4_model2'
+CHECKS_TABLE_DIR = TABLE_DIR / '5_checks'
+FIGURE_DIR = OUTPUT_DIR / 'figures'
+EDA_FIGURE_DIR = FIGURE_DIR / '1_eda'
+MODEL_FIGURE_DIR = FIGURE_DIR / '2_model'
+CHECKS_FIGURE_DIR = FIGURE_DIR / '3_checks'
+OUTPUT_SUBDIRS = (DELIVERABLES_DIR, QUALITY_TABLE_DIR, EDA_TABLE_DIR,
+                  MODEL1_TABLE_DIR, MODEL2_TABLE_DIR, CHECKS_TABLE_DIR,
+                  EDA_FIGURE_DIR, MODEL_FIGURE_DIR, CHECKS_FIGURE_DIR)
 
-DATA_CHECKS_CSV_PATH = TABLE_DIR / 'data_checks.csv'
-DATA_CHECKS_MARKDOWN_PATH = TABLE_DIR / 'data_checks.md'
-CLIP_FEATURES_PATH = TABLE_DIR / 'clip_features.csv'
-COVERAGE_TABLE_PATH = TABLE_DIR / 'coverage_labeled_vs_unlabeled.csv'
-QUALITY_AUDIT_CSV_PATH = TABLE_DIR / 'quality_audit.csv'
-QUALITY_AUDIT_MARKDOWN_PATH = TABLE_DIR / 'quality_audit.md'
-DATA_TYPE_INVENTORY_PATH = TABLE_DIR / 'data_type_inventory.csv'
-BASE_RATE_TABLE_PATH = TABLE_DIR / 'base_rate_ppv_scenarios.csv'
-BASE_RATE_SUMMARY_PATH = TABLE_DIR / 'base_rate_summary.md'
-NOISE_FLOOR_SPECTRA_PATH = TABLE_DIR / 'noise_floor_spectra_by_logger.csv'
-NOISE_FLOOR_SUMMARY_PATH = TABLE_DIR / 'noise_floor_summary.md'
-EXCESS_BAND_TABLE_PATH = TABLE_DIR / 'excess_over_noise_floor_by_band.csv'
+# Deliverable. Rename with the application reference number before
+# submitting (e.g., 1234567_predictions.csv).
+PREDICTIONS_OUTPUT_PATH = DELIVERABLES_DIR / 'predictions.csv'
+
+# Stage 1: data quality
+DATA_CHECKS_CSV_PATH = QUALITY_TABLE_DIR / 'data_checks.csv'
+DATA_CHECKS_MARKDOWN_PATH = QUALITY_TABLE_DIR / 'data_checks.md'
+COVERAGE_TABLE_PATH = QUALITY_TABLE_DIR / 'coverage_labeled_vs_unlabeled.csv'
+QUALITY_AUDIT_CSV_PATH = QUALITY_TABLE_DIR / 'quality_audit.csv'
+QUALITY_AUDIT_MARKDOWN_PATH = QUALITY_TABLE_DIR / 'quality_audit.md'
+DATA_TYPE_INVENTORY_PATH = QUALITY_TABLE_DIR / 'data_type_inventory.csv'
+BASE_RATE_TABLE_PATH = QUALITY_TABLE_DIR / 'base_rate_ppv_scenarios.csv'
+BASE_RATE_SUMMARY_PATH = QUALITY_TABLE_DIR / 'base_rate_summary.md'
+
+# Stage 2: exploratory analysis and band measures
+CLIP_FEATURES_PATH = EDA_TABLE_DIR / 'clip_features.csv'
+NOISE_FLOOR_SPECTRA_PATH = EDA_TABLE_DIR / 'noise_floor_spectra_by_logger.csv'
+NOISE_FLOOR_SUMMARY_PATH = EDA_TABLE_DIR / 'noise_floor_summary.md'
+EXCESS_BAND_TABLE_PATH = EDA_TABLE_DIR / 'excess_over_noise_floor_by_band.csv'
+BAND_GEOMETRY_PATH = EDA_TABLE_DIR / 'band_geometry.csv'
+BAND_EVENNESS_PATH = EDA_TABLE_DIR / 'band_evenness.csv'
+CLUSTER_TABLE_PATH = EDA_TABLE_DIR / 'cluster_assignments.csv'
+CLUSTER_SUMMARY_PATH = EDA_TABLE_DIR / 'cluster_summary.md'
+CLUSTER_FEATURE_TABLE_PATH = EDA_TABLE_DIR / 'cluster_features.csv'
+
+# Stage 3: Model 1 (knowledge-based score) and its probabilities
+MODEL1_SCORES_PATH = MODEL1_TABLE_DIR / 'model1_scores.csv'
+MODEL1_LOO_PATH = MODEL1_TABLE_DIR / 'model1_leave_one_out.csv'
+MODEL1_SUMMARY_PATH = MODEL1_TABLE_DIR / 'model1_summary.md'
+MODEL1_PROBABILITY_PATH = MODEL1_TABLE_DIR / 'model1_probabilities.csv'
+MODEL1_PROBABILITY_SUMMARY_PATH = (MODEL1_TABLE_DIR
+                                   / 'model1_probability_summary.md')
+
+# Stage 4: Model 2 (Firth logistic regression)
+MODEL2_PROBABILITY_PATH = MODEL2_TABLE_DIR / 'model2_probabilities.csv'
+MODEL2_FITS_PATH = MODEL2_TABLE_DIR / 'model2_fits.csv'
+MODEL2_SUMMARY_PATH = MODEL2_TABLE_DIR / 'model2_summary.md'
+
+# Stage 5: robustness and sanity checks (outside the model)
+SANITY_PVC_PREDICTION_TABLE_PATH = (CHECKS_TABLE_DIR
+                                    / 'sanity_predicted_pvc_leak.csv')
+SANITY_PVC_SITE_TABLE_PATH = (CHECKS_TABLE_DIR
+                              / 'sanity_pvc_sites_vs_prediction.csv')
+SANITY_PVC_VS_MODEL_PATH = CHECKS_TABLE_DIR / 'sanity_pvc_vs_model_calls.csv'
+SANITY_PVC_FIGURE_PATH = CHECKS_FIGURE_DIR / 'sanity_predicted_pvc_leak.png'
+SELF_TRAINING_TABLE_PATH = CHECKS_TABLE_DIR / 'check_self_training.csv'
+SELF_TRAINING_SUMMARY_PATH = CHECKS_TABLE_DIR / 'check_self_training.md'
 
 
-# ---------------------------------------------------------------------------
-# Recording format (from the Candidate Instructions)
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# DATA FORMAT AND CONTEXT (from the Candidate Instructions)
+# ===========================================================================
 SAMPLE_RATE_HZ = 4000
 CLIP_DURATION_SECONDS = 5
 SAMPLES_PER_CLIP = SAMPLE_RATE_HZ * CLIP_DURATION_SECONDS
@@ -49,25 +100,17 @@ N_CLIPS_EXPECTED = 46
 N_LABELED_EXPECTED = 6
 N_UNLABELED_EXPECTED = 40
 
-# ---------------------------------------------------------------------------
-# Metadata vocabularies
-# ---------------------------------------------------------------------------
 LOGGER_MODELS = ('A', 'B')
 PIPE_MATERIALS = ('cast_iron', 'PVC')
 LEAK_LABEL = 'leak'
 NO_LEAK_LABEL = 'no_leak'
 VALID_LABELS = (LEAK_LABEL, NO_LEAK_LABEL)
+DUG_LABELS = VALID_LABELS      # label groups of the six dug sites
 
-# ---------------------------------------------------------------------------
-# Decision context (from the Candidate Instructions)
-# ---------------------------------------------------------------------------
 HISTORICAL_LEAK_RATE = 1 / 8   # ~1 in 8 surveyed sites has a leak
 MAX_DIGS_THIS_WEEK = 5
 COST_PER_DIG_DOLLARS = 8000
 
-# ---------------------------------------------------------------------------
-# Clock-time handling
-# ---------------------------------------------------------------------------
 # Recordings are overnight. Hours after this cutoff are treated as the
 # previous evening (e.g., 22:08 -> -1.87 h) so the night reads left to right.
 EVENING_CUTOFF_HOUR = 12
@@ -75,12 +118,14 @@ HOURS_PER_DAY = 24
 MINUTES_PER_HOUR = 60
 # The crew chief notes some loggers were still recording when "the morning
 # commute started." 6:00 a.m. is used as an approximate start, not a
-# measured one; sensitivity to this choice should be checked.
+# measured one.
 MORNING_COMMUTE_START_HOUR = 6.0
 
-# ---------------------------------------------------------------------------
-# Signal-summary settings
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# SIGNAL PROCESSING
+# ===========================================================================
+POWER_TO_DB = 10               # decibels = 10 x log10(power ratio)
 # Short-window loudness envelope: 50 ms windows resolve passing vehicles and
 # impacts (which last tenths of a second) while averaging out the hiss.
 ENVELOPE_WINDOW_SECONDS = 0.05
@@ -101,10 +146,14 @@ FREQUENCY_BAND_EDGES_HZ = (0, 250, 500, 1000, NYQUIST_HZ)
 # energy to higher pitches. Share of energy above this cutoff summarizes
 # "how high-pitched" a recording is.
 HIGH_PITCH_CUTOFF_HZ = 500
+# Narrow electrical-hum lines at 120 Hz multiples (U02, U15, U16, U22).
+HUM_FUNDAMENTAL_HZ = 120
+HUM_HALF_WIDTH_HZ = 8
 
-# ---------------------------------------------------------------------------
-# Data-quality thresholds
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# STAGE 1: DATA QUALITY
+# ===========================================================================
 # Saturated samples pile up at 0.98999, just under full scale, so the
 # effective sensor ceiling (not 1.0) defines clipping.
 CLIPPING_THRESHOLD = 0.98          # |amplitude| at/above this = clipped
@@ -132,16 +181,19 @@ OVERNIGHT_WINDOW_HOURS = (-4.0, 8.0)
 # A clip with more than 1% of samples at the sensor ceiling is overloaded.
 MAX_CLIPPED_SHARE = 0.01
 
-# ---------------------------------------------------------------------------
-# Figures
-# ---------------------------------------------------------------------------
-FIGURE_DPI = 300
-DATA_SOURCE_NOTE = ('Data source: city water department acoustic logger '
-                    'pilot, 46 overnight recordings.')
+# Recordings removed from clustering and modeling. U40 is a low-quality
+# recording, not fit for analysis: signal saturation (15% of samples
+# clipped at sensor full scale) and a 1.2 s dropout (constant zero-valued
+# samples) make its amplitude and spectral features invalid.
+ANALYSIS_EXCLUDED_CLIPS = ('U40',)
+ANALYSIS_EXCLUSION_REASON = (
+    'U40 excluded (insufficient data quality): signal saturation (15% of '
+    'samples clipped) and a 1.2 s dropout make its features invalid.')
 
-# ---------------------------------------------------------------------------
-# Noise-floor baseline (per logger model)
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# STAGE 2: EXPLORATORY ANALYSIS AND BAND MEASURES
+# ===========================================================================
 # Bands (Hz) for "power above the logger's own noise floor." 250-400 Hz is
 # the edge zone between low-frequency rumble and the leak band; 400-1,300 Hz
 # is the band all three dug leaks share (EDA Figs 5-6).
@@ -158,39 +210,19 @@ BAND_PRESENT_EXCESS_DB = 3.0
 # below NOISE_FLOOR_RMS. U34 (PVC) carries a steady 250-400 Hz band about
 # 19 dB above the floor, so it is not pure device noise.
 EXCLUDED_FROM_NOISE_FLOOR = ('U34',)
-# Narrow electrical-hum lines at 120 Hz multiples (U02, U15, U16, U22).
-HUM_FUNDAMENTAL_HZ = 120
-HUM_HALF_WIDTH_HZ = 8
 
-# ---------------------------------------------------------------------------
-# Analysis set
-# ---------------------------------------------------------------------------
-# Recordings removed from clustering and modeling. U40 is overloaded: 15% of
-# its samples sit at the sensor ceiling and the signal drops to exactly zero
-# for 1.2 s, so its loudness and pitch summaries do not describe the pipe.
-# It still needs a row in predictions.csv, marked as unscorable.
-ANALYSIS_EXCLUDED_CLIPS = ('U40',)
-ANALYSIS_EXCLUSION_REASON = (
-    'U40 excluded: sensor overloaded (15% of samples clipped) and 1.2 s '
-    'signal dropout, so its features are unreliable.')
-
-# ---------------------------------------------------------------------------
-# Clustering
-# ---------------------------------------------------------------------------
 CLUSTER_COUNTS = (2, 3, 4)
 KMEANS_RANDOM_SEED = 20261117
 KMEANS_RESTARTS = 50
-CLUSTER_TABLE_PATH = TABLE_DIR / 'cluster_assignments.csv'
-CLUSTER_SUMMARY_PATH = TABLE_DIR / 'cluster_summary.md'
-CLUSTER_FEATURE_TABLE_PATH = TABLE_DIR / 'cluster_features.csv'
 
-# ---------------------------------------------------------------------------
-# Model 1: knowledge-based score
-# ---------------------------------------------------------------------------
-MODEL_FIGURE_DIR = OUTPUT_DIR / 'figures' / 'model'
-MODEL1_SCORES_PATH = TABLE_DIR / 'model1_scores.csv'
-MODEL1_LOO_PATH = TABLE_DIR / 'model1_leave_one_out.csv'
-MODEL1_SUMMARY_PATH = TABLE_DIR / 'model1_summary.md'
+
+# ===========================================================================
+# STAGE 3: MODEL 1 (knowledge-based score) AND ITS PROBABILITIES
+# ===========================================================================
+# Two versions of every spectral measure: 'floor' (each logger's noise floor
+# subtracted; the main analysis) and 'raw' (as recorded; robustness check).
+MAIN_VERSION = 'floor'
+MODEL_VERSIONS = ('floor', 'raw')
 # A frame "has the band" when the band stands out at least this many dB
 # above the average of its two neighboring bands (2x the power).
 PERSISTENCE_CONTRAST_DB = 3.0
@@ -206,9 +238,6 @@ PVC_NEIGHBOR_KEYS = ('low_0_250', 'leak_band_400_1300')
 # PERSISTENCE_CUTOFF of frames and stands out at least this much overall.
 PERSISTENT_BAND_MIN_CONTRAST_DB = 3.0
 
-# Model 1 probabilities (Option A: two tiers + Bayes' rule)
-MODEL1_PROBABILITY_PATH = TABLE_DIR / 'model1_probabilities.csv'
-MODEL1_PROBABILITY_SUMMARY_PATH = TABLE_DIR / 'model1_probability_summary.md'
 # Pseudo-counts added to each cell of the 2 x 2 dug-site table, because 3/3
 # and 0/3 would otherwise imply certainty: Jeffreys (0.5) and Laplace (1).
 SMOOTHING_PSEUDO_COUNTS = (0.5, 1.0)
@@ -216,8 +245,6 @@ SMOOTHING_PSEUDO_COUNTS = (0.5, 1.0)
 # strongest site with the unconfirmed PVC band. Its result would give the
 # first labeled PVC example.
 INFORMATIVE_DIG_SITE = 'U34'
-# Band evenness across pitches
-BAND_EVENNESS_PATH = TABLE_DIR / 'band_evenness.csv'
 
 # Graded confidence within each tier (approved 2026-11-17). Presence sets
 # the tier; quality places a site inside the tier's range (on log-odds).
@@ -238,29 +265,20 @@ INTENSENESS_WEIGHT = 0.4
 SIGNATURE_WIDTH_TOLERANCE_OCTAVES = 0.5
 SIGNATURE_GAP_FRACTION = 0.5
 
-# Model 2: Firth-penalized logistic regression on the Model 1 score
-MODEL2_PROBABILITY_PATH = TABLE_DIR / 'model2_probabilities.csv'
-MODEL2_FITS_PATH = TABLE_DIR / 'model2_fits.csv'
-MODEL2_SUMMARY_PATH = TABLE_DIR / 'model2_summary.md'
+
+# ===========================================================================
+# STAGE 4: MODEL 2 (Firth-penalized logistic regression on the M1 score)
+# ===========================================================================
 FIRTH_MAX_ITERATIONS = 200
 FIRTH_TOLERANCE = 1e-9
 
-# Deliverable. Rename with the application reference number before
-# submitting (e.g., 1234567_predictions.csv).
-PREDICTIONS_OUTPUT_PATH = OUTPUT_DIR / 'predictions.csv'
 
-# ---------------------------------------------------------------------------
-# Sanity checks (outside the model)
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# STAGE 5: ROBUSTNESS AND SANITY CHECKS
+# ===========================================================================
 # Literature-based comparisons. Nothing in feature, clustering or modeling
 # code may import from src/sanity_* modules: the model uses only the pilot
 # data provided.
-SANITY_FIGURE_DIR = OUTPUT_DIR / 'figures' / 'sanity_checks'
-SANITY_PVC_PREDICTION_TABLE_PATH = TABLE_DIR / 'sanity_predicted_pvc_leak.csv'
-SANITY_PVC_SITE_TABLE_PATH = TABLE_DIR / 'sanity_pvc_sites_vs_prediction.csv'
-SANITY_PVC_VS_MODEL_PATH = TABLE_DIR / 'sanity_pvc_vs_model_calls.csv'
-SELF_TRAINING_TABLE_PATH = TABLE_DIR / 'check_self_training.csv'
-SELF_TRAINING_SUMMARY_PATH = TABLE_DIR / 'check_self_training.md'
 # Label spreading: k nearest neighbors in standardized feature space, and
 # how much each labeled site may move away from its own label (alpha).
 LABEL_SPREADING_NEIGHBORS = 5
@@ -270,3 +288,13 @@ LABEL_SPREADING_ALPHA = 0.2
 SELF_TRAINING_LEAK_CUTOFF = 0.9
 SELF_TRAINING_NO_LEAK_CUTOFF = 0.1
 SELF_TRAINING_MAX_ROUNDS = 10
+
+
+# ===========================================================================
+# OUTPUT FORMATTING
+# ===========================================================================
+TABLE_DECIMALS = 4             # rounding for saved tables
+SUMMARY_TABLE_ROWS = 12        # rows shown in Markdown summary tables
+FIGURE_DPI = 300
+DATA_SOURCE_NOTE = ('Data source: city water department acoustic logger '
+                    'pilot, 46 overnight recordings.')

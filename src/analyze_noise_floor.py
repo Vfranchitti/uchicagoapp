@@ -12,11 +12,11 @@ sites, possibly fainter than the cast-iron leak band (e.g., U34).
 
 Outputs
 -------
-outputs/tables/noise_floor_spectra_by_logger.csv
-outputs/tables/noise_floor_summary.md
-outputs/tables/excess_over_noise_floor_by_band.csv
-outputs/figures/eda/eda_18_logger_noise_floors.png
-outputs/figures/eda/eda_19_excess_over_noise_floor.png
+outputs/tables/2_eda/noise_floor_spectra_by_logger.csv
+outputs/tables/2_eda/noise_floor_summary.md
+outputs/tables/2_eda/excess_over_noise_floor_by_band.csv
+outputs/figures/1_eda/eda_18_logger_noise_floors.png
+outputs/figures/1_eda/eda_19_excess_over_noise_floor.png
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,24 +39,26 @@ from src.config import (
     NOISE_FLOOR_SPECTRA_PATH,
     NOISE_FLOOR_SUMMARY_PATH,
     NYQUIST_HZ,
-    TABLE_DIR,
+    TABLE_DECIMALS,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.plot_style import (
+    DISPLAY_SMOOTHING_BINS,
     HEALTH_LAB_TEAL,
     LABEL_COLORS,
     LOGGER_COLORS,
+    SMALL_FONT_SIZE,
     TEXT_DARK,
     TEXT_GREY,
+    TINY_FONT_SIZE,
     UCHICAGO_MAROON,
     add_title_and_note,
     apply_urban_labs_style,
     finish_and_save,
 )
+from src.utils import make_output_dirs, moving_average, to_db
 
-POWER_TO_DB = 10
 # Light smoothing across frequency for display only (5 bins = 20 Hz).
-DISPLAY_SMOOTHING_BINS = 5
 HEATMAP_DB_RANGE = (-6, 30)
 GROUP_ORDER = (('A', 'cast_iron'), ('A', 'PVC'), ('B', 'cast_iron'),
                ('B', 'PVC'))
@@ -66,17 +68,12 @@ EXCESS_COLORMAP = LinearSegmentedColormap.from_list(
     'teal_white_maroon', [HEALTH_LAB_TEAL, '#FFFFFF', UCHICAGO_MAROON])
 
 
-def _to_db(power):
-    """Power to decibels, guarding against log(0)."""
-    return POWER_TO_DB * np.log10(power + np.finfo(float).tiny)
-
-
 def compute_clip_spectra_db(metadata, amplitudes):
     """Return (frequencies_hz, DataFrame of dB spectra, one row per clip)."""
     spectra = {}
     for clip_id in metadata['clip_id']:
         frequencies_hz, psd = compute_welch_psd(amplitudes[clip_id])
-        spectra[clip_id] = _to_db(psd)
+        spectra[clip_id] = to_db(psd)
     return frequencies_hz, pd.DataFrame(spectra, index=frequencies_hz).T
 
 
@@ -142,7 +139,7 @@ def compare_floors(clip_features, floor_clip_ids, baselines_db):
     }
 
 
-def write_summary(comparison, band_table):
+def _write_summary(comparison, band_table):
     """Plain-language summary of the floor check and band search."""
     leaks = band_table[band_table['label_group'] == LEAK_LABEL]
     has_leak_band = (band_table['leak_band_400_1300']
@@ -186,12 +183,6 @@ def write_summary(comparison, band_table):
                                         encoding='utf-8')
 
 
-def _smooth(values):
-    """Moving average across frequency, for display."""
-    kernel = np.ones(DISPLAY_SMOOTHING_BINS) / DISPLAY_SMOOTHING_BINS
-    return np.convolve(values, kernel, mode='same')
-
-
 def plot_noise_floors(metadata, spectra_db, baselines_db, floor_clip_ids,
                       comparison):
     """Fig 18 (ACCURATE). Each logger's noise floor, level and shape."""
@@ -200,16 +191,20 @@ def plot_noise_floors(metadata, spectra_db, baselines_db, floor_clip_ids,
                                              sharex=True)
     logger_by_clip = metadata.set_index('clip_id')['logger_model']
     for clip_id in floor_clip_ids:
-        level_ax.plot(frequencies_hz, _smooth(spectra_db.loc[clip_id]),
+        level_ax.plot(frequencies_hz, moving_average(spectra_db.loc[clip_id],
+                                                     DISPLAY_SMOOTHING_BINS),
                       color=LOGGER_COLORS[logger_by_clip[clip_id]],
                       linewidth=0.4, alpha=0.35)
     for logger in LOGGER_MODELS:
         baseline = baselines_db[logger]
         n_clips = comparison['n_floor_clips'][logger]
-        level_ax.plot(frequencies_hz, _smooth(baseline),
+        level_ax.plot(frequencies_hz, moving_average(baseline,
+                                                     DISPLAY_SMOOTHING_BINS),
                       color=LOGGER_COLORS[logger], linewidth=1.8,
                       label=f'Logger {logger} floor (median of {n_clips})')
-        shape_ax.plot(frequencies_hz, _smooth(baseline - baseline.mean()),
+        shape_ax.plot(frequencies_hz,
+                      moving_average(baseline - baseline.mean(),
+                                     DISPLAY_SMOOTHING_BINS),
                       color=LOGGER_COLORS[logger], linewidth=1.8)
     level_ax.set_title('Absolute level', loc='left')
     shape_ax.set_title('Shape only (each floor centered on its mean)',
@@ -219,7 +214,7 @@ def plot_noise_floors(metadata, spectra_db, baselines_db, floor_clip_ids,
     for ax in (level_ax, shape_ax):
         ax.set_xlabel('Pitch (Hz)')
     level_ax.set_xlim(0, NYQUIST_HZ)
-    level_ax.legend(loc='upper right', fontsize=7)
+    level_ax.legend(loc='upper right', fontsize=SMALL_FONT_SIZE)
     fig.subplots_adjust(wspace=0.3)
     bottom = add_title_and_note(
         fig, 18, 'Each logger\'s own noise floor, from its quietest '
@@ -246,7 +241,8 @@ def plot_excess_heatmap(metadata, excess_db):
                  ].sort_values('overnight_hour')
         for logger, pipe in GROUP_ORDER])
     frequencies_hz = excess_db.columns.to_numpy()
-    matrix = np.vstack([_smooth(excess_db.loc[clip_id].to_numpy())
+    matrix = np.vstack([moving_average(excess_db.loc[clip_id].to_numpy(),
+                                       DISPLAY_SMOOTHING_BINS)
                         for clip_id in ordered['clip_id']])
     fig, ax = plt.subplots(figsize=EXCESS_FIGURE)
     image = ax.imshow(
@@ -259,7 +255,7 @@ def plot_excess_heatmap(metadata, excess_db):
               f'{r.pipe_material.replace("_", " ")} | {r.recorded_at}'
               for r in ordered.itertuples()]
     ax.set_yticks(np.arange(len(ordered)) + 0.5)
-    ax.set_yticklabels(labels, fontsize=6)
+    ax.set_yticklabels(labels, fontsize=TINY_FONT_SIZE)
     for tick, group in zip(ax.get_yticklabels(), ordered['label_group']):
         if group != 'unlabeled':
             tick.set_color(LABEL_COLORS[group])
@@ -277,7 +273,7 @@ def plot_excess_heatmap(metadata, excess_db):
     top_axis.set_xticks([np.mean(edges)
                          for edges in EXCESS_BANDS_HZ.values()])
     top_axis.set_xticklabels(['rumble', 'edge', 'leak band', 'high'],
-                             fontsize=7)
+                             fontsize=SMALL_FONT_SIZE)
     top_axis.tick_params(length=0)
     colorbar = fig.colorbar(image, ax=ax, shrink=0.5, pad=0.02)
     colorbar.set_label('dB above own logger\'s noise floor')
@@ -308,11 +304,12 @@ def run_noise_floor_analysis():
     excess_db = compute_excess_spectra(metadata, spectra_db, baselines_db)
     band_table = summarize_excess_by_band(metadata, excess_db)
     comparison = compare_floors(clip_features, floor_clip_ids, baselines_db)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    baselines_db.rename_axis('frequency_hz').round(3).to_csv(
+    make_output_dirs()
+    baselines_db.rename_axis('frequency_hz').round(TABLE_DECIMALS).to_csv(
         NOISE_FLOOR_SPECTRA_PATH)
-    band_table.round(2).to_csv(EXCESS_BAND_TABLE_PATH, index=False)
-    write_summary(comparison, band_table)
+    band_table.round(TABLE_DECIMALS).to_csv(EXCESS_BAND_TABLE_PATH,
+                                            index=False)
+    _write_summary(comparison, band_table)
     return [plot_noise_floors(metadata, spectra_db, baselines_db,
                               floor_clip_ids, comparison),
             plot_excess_heatmap(metadata, excess_db)]

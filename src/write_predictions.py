@@ -11,7 +11,7 @@ confidence is the main-analysis probability (see
 compute_model1_probabilities.py). Excluded clips (U40) have no score, so
 they get no prediction: 'excluded from analysis', blank confidence, and a note.
 
-Output: outputs/predictions.csv
+Output: outputs/deliverables/predictions.csv
 """
 import pandas as pd
 

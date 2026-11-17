@@ -11,8 +11,8 @@ Checks already defined in run_data_checks.py are reused, not rewritten.
 
 Outputs
 -------
-outputs/tables/data_type_inventory.csv
-outputs/tables/quality_audit.{csv,md}
+outputs/tables/1_quality/data_type_inventory.csv
+outputs/tables/1_quality/quality_audit.{csv,md}
 """
 import numpy as np
 import pandas as pd
@@ -51,7 +51,6 @@ from src.config import (
     SAMPLES_PER_CLIP,
     SIGNIFICANCE_LEVEL,
     SITE_ID_PATTERN,
-    TABLE_DIR,
     VALID_LABELED_FLAGS,
     VALID_LABELS,
 )
@@ -79,6 +78,7 @@ from src.run_data_checks import (
     make_check_result,
     write_check_tables,
 )
+from src.utils import make_output_dirs
 
 METADATA_TEXT_COLUMNS = ('clip_id', 'site_id', 'logger_model',
                          'pipe_material', 'recorded_at', 'labeled', 'label')
@@ -95,6 +95,7 @@ def _in_section(section, check_result):
 def build_data_type_inventory(metadata, example_clip):
     """One row per variable: kind of data, origin, and observed values."""
     def describe_levels(column):
+        """'level (count), ...' for one metadata column."""
         return ', '.join(f'{level} ({count})' for level, count in
                          metadata[column].replace('', '(blank)')
                          .value_counts().items())
@@ -405,7 +406,7 @@ def run_quality_audit():
     amplitudes = {clip_id: df['amplitude'].to_numpy()
                   for clip_id, df in clip_tables.items()}
     clip_features = build_clip_feature_table(metadata, amplitudes)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
+    make_output_dirs()
     build_data_type_inventory(metadata, next(iter(clip_tables.values()))
                               ).to_csv(DATA_TYPE_INVENTORY_PATH, index=False)
     sections = [

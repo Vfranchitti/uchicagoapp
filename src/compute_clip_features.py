@@ -5,7 +5,7 @@ Features are chosen to mirror the crew chief's field notes: a leak is a
 street noise "comes and goes." Each feature therefore measures loudness,
 steadiness over time, or how noise-like (hiss-like) the sound is.
 
-Output: outputs/tables/clip_features.csv (one row per clip, joined to
+Output: outputs/tables/2_eda/clip_features.csv (one row per clip, joined to
 metadata).
 """
 import numpy as np
@@ -20,14 +20,15 @@ from src.config import (
     HIGH_PITCH_CUTOFF_HZ,
     HUM_FUNDAMENTAL_HZ,
     HUM_HALF_WIDTH_HZ,
+    POWER_TO_DB,
     SAMPLE_RATE_HZ,
     SPECTROGRAM_OVERLAP_SAMPLES,
     SPECTROGRAM_SEGMENT_SAMPLES,
-    TABLE_DIR,
     TRANSIENT_LOUDNESS_RATIO,
     WELCH_SEGMENT_SAMPLES,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
+from src.utils import make_output_dirs
 
 ENVELOPE_LOW_PERCENTILE = 10
 ENVELOPE_HIGH_PERCENTILE = 90
@@ -58,7 +59,6 @@ BAND_DYNAMICS_LABELS = {
     'leak_band_level_variability_db':
         'Leak-band steadiness (SD over time of 400-1,300 Hz power, dB)',
 }
-POWER_TO_DB = 10
 
 
 def compute_rms_envelope(amplitude):
@@ -212,6 +212,6 @@ if __name__ == '__main__':
     metadata = load_metadata()
     amplitudes = load_all_amplitudes(metadata)
     clip_features = build_clip_feature_table(metadata, amplitudes)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
+    make_output_dirs()
     clip_features.to_csv(CLIP_FEATURES_PATH, index=False)
     print(f'Wrote {len(clip_features)} rows to {CLIP_FEATURES_PATH}')

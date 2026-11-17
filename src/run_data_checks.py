@@ -8,9 +8,9 @@ invalidate everything after them.
 
 Outputs
 -------
-outputs/tables/data_checks.csv   one row per check (status, finding)
-outputs/tables/data_checks.md    the same, as a readable table
-outputs/tables/coverage_labeled_vs_unlabeled.csv
+outputs/tables/1_quality/data_checks.csv   one row per check (status, finding)
+outputs/tables/1_quality/data_checks.md    the same, as a readable table
+outputs/tables/1_quality/coverage_labeled_vs_unlabeled.csv
 """
 import hashlib
 from itertools import combinations
@@ -45,16 +45,12 @@ from src.config import (
     PIPE_MATERIALS,
     SAMPLE_RATE_HZ,
     SAMPLES_PER_CLIP,
-    TABLE_DIR,
     TIME_GRID_TOLERANCE_SECONDS,
     UNLABELED_CLIP_DIR,
     VALID_LABELS,
 )
-from src.load_recordings import (
-    load_clip_csv,
-    load_clip_wav,
-    load_metadata,
-)
+from src.load_recordings import load_clip_csv, load_clip_wav, load_metadata
+from src.utils import make_output_dirs
 
 PASS, FLAG, INFO = 'pass', 'FLAG', 'info'
 # Scales the median absolute deviation to a normal-equivalent SD.
@@ -473,7 +469,7 @@ def write_check_tables(check_results, csv_path=DATA_CHECKS_CSV_PATH,
     """
     results = pd.DataFrame(check_results)
     results.insert(0, 'order', range(1, len(results) + 1))
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
+    make_output_dirs()
     results.to_csv(csv_path, index=False)
     columns = list(results.columns)
     markdown_lines = [

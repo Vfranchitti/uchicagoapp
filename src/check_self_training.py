@@ -18,8 +18,8 @@ level. Check only; nothing feeds the predictions.
 
 Outputs
 -------
-outputs/tables/check_self_training.csv
-outputs/tables/check_self_training.md
+outputs/tables/5_checks/check_self_training.csv
+outputs/tables/5_checks/check_self_training.md
 """
 import numpy as np
 import pandas as pd
@@ -31,6 +31,8 @@ from src.config import (
     LABEL_SPREADING_ALPHA,
     LABEL_SPREADING_NEIGHBORS,
     LEAK_LABEL,
+    MAIN_VERSION,
+    MAX_DIGS_THIS_WEEK,
     MODEL1_PROBABILITY_PATH,
     MODEL1_SCORES_PATH,
     NO_LEAK_LABEL,
@@ -39,14 +41,15 @@ from src.config import (
     SELF_TRAINING_NO_LEAK_CUTOFF,
     SELF_TRAINING_SUMMARY_PATH,
     SELF_TRAINING_TABLE_PATH,
-    TABLE_DIR,
+    SUMMARY_TABLE_ROWS,
+    TABLE_DECIMALS,
 )
 from src.measure_band_evenness import compute_band_evenness
 from src.run_model_logistic import fit_firth_logistic
+from src.utils import make_output_dirs
 
 UNLABELED_CODE = -1
 FEATURES = ('contrast_db', 'persistence', 'bin_coverage')
-MAIN_VERSION = 'floor'
 
 
 def build_feature_table():
@@ -125,13 +128,14 @@ def compare_with_model1(table, spread_share, spread_is_leak,
     return result.sort_values('confidence', ascending=False)
 
 
-def write_summary(result, history):
+def _write_summary(result, history):
     """Plain-language Markdown summary."""
     model1_leaks = set(result.loc[result['prediction'] == 1, 'clip_id'])
     spread_leaks = set(result.loc[result['spread_is_leak'] == 1, 'clip_id'])
     self_leaks = set(result.loc[result['self_training_label'] == 1,
                                 'clip_id'])
-    top = {name: result.nlargest(5, column)['clip_id'].tolist()
+    top = {name: result.nlargest(MAX_DIGS_THIS_WEEK,
+                                 column)['clip_id'].tolist()
            for name, column in (('Model 1', 'confidence'),
                                 ('Label spreading', 'spread_leak_share'),
                                 ('Self-training',
@@ -164,7 +168,7 @@ def write_summary(result, history):
     lines += [f'| {r.clip_id} | {r.ranking} | {r.confidence:.1%} | '
               f'{r.spread_leak_share:.2f} | '
               f'{r.self_training_probability:.2f} |'
-              for r in result.head(10).itertuples()]
+              for r in result.head(SUMMARY_TABLE_ROWS).itertuples()]
     SELF_TRAINING_SUMMARY_PATH.write_text('\n'.join(lines) + '\n',
                                           encoding='utf-8')
 
@@ -176,9 +180,9 @@ def run_self_training_check():
     self_probability, self_labels, history = run_self_training(table)
     result = compare_with_model1(table, spread_share, spread_is_leak,
                                  self_probability, self_labels)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    result.round(4).to_csv(SELF_TRAINING_TABLE_PATH, index=False)
-    write_summary(result, history)
+    make_output_dirs()
+    result.round(TABLE_DECIMALS).to_csv(SELF_TRAINING_TABLE_PATH, index=False)
+    _write_summary(result, history)
     return result
 
 

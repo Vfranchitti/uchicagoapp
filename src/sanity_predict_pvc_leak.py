@@ -7,7 +7,7 @@ prediction. The model itself works only from the provided pilot data; this
 literature-based prediction is held aside to sanity-check the model's PVC
 calls at the end.
 
-Method (sources in notes/pvc_attenuation_research.md):
+Method (sources in notes/research/pvc_attenuation_research.md):
 - Cast-iron leak signature: median of the three dug leaks' power above
   their own logger's noise floor, inside 400-1,300 Hz (zero elsewhere).
 - Plastic-pipe loss per metre rises in step with pitch:
@@ -22,9 +22,9 @@ Method (sources in notes/pvc_attenuation_research.md):
 
 Outputs
 -------
-outputs/tables/sanity_predicted_pvc_leak.csv
-outputs/tables/sanity_pvc_sites_vs_prediction.csv
-outputs/figures/sanity_checks/sanity_predicted_pvc_leak.png
+outputs/tables/5_checks/sanity_predicted_pvc_leak.csv
+outputs/tables/5_checks/sanity_pvc_sites_vs_prediction.csv
+outputs/figures/3_checks/sanity_predicted_pvc_leak.png
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -42,27 +42,33 @@ from src.config import (
     EXCESS_BANDS_HZ,
     LEAK_LABEL,
     NYQUIST_HZ,
-    SANITY_FIGURE_DIR,
+    POWER_TO_DB,
+    SANITY_PVC_FIGURE_PATH,
     SANITY_PVC_PREDICTION_TABLE_PATH,
     SANITY_PVC_SITE_TABLE_PATH,
-    TABLE_DIR,
+    TABLE_DECIMALS,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.plot_style import (
+    ANNOTATION_FONT_SIZE,
     CRIME_LAB_GOLD,
-    FIGURE_DPI,
+    DISPLAY_SMOOTHING_BINS,
     HEALTH_LAB_LIGHT_TEAL,
     HEALTH_LAB_NAVY,
     HEALTH_LAB_TEAL,
+    LIGHT_GRID_GREY,
+    PANEL_TITLE_FONT_SIZE,
     TEXT_DARK,
     TEXT_GREY,
     UCHICAGO_MAROON,
     UNLABELED_GREY,
     add_title_and_note,
     apply_urban_labs_style,
+    save_figure,
 )
+from src.utils import make_output_dirs, moving_average
 
-# --- Literature inputs (see notes/pvc_attenuation_research.md) -------------
+# --- Literature inputs (see notes/research/pvc_attenuation_research.md) ---
 NEPERS_TO_DB = 8.686              # 20 * log10(e)
 BETA_LOW_S_PER_M = 1e-4           # least lossy plastic pipe
 BETA_HIGH_S_PER_M = 5e-4          # most lossy plastic pipe
@@ -76,9 +82,7 @@ DISTANCE_COLORS = dict(zip(LEAK_DISTANCES_M, (
     UCHICAGO_MAROON, CRIME_LAB_GOLD, HEALTH_LAB_TEAL, HEALTH_LAB_NAVY)))
 HIGHLIGHT_PVC_SITES = {'U34': UCHICAGO_MAROON, 'U15': CRIME_LAB_GOLD,
                        'U32': HEALTH_LAB_NAVY}
-DISPLAY_SMOOTHING_BINS = 5
-FIGURE_SIZE = (7.5, 4.6)
-POWER_TO_DB = 10
+SANITY_FIGURE_SIZE = (7.5, 4.6)
 LOWER_PITCH_BAND_HZ = (300, 600)
 UPPER_PITCH_BAND_HZ = (900, 1300)
 
@@ -185,23 +189,18 @@ def compare_pvc_sites(metadata, excess_db):
     return pd.DataFrame(rows)
 
 
-def _smooth(values):
-    """Moving average across frequency, for display."""
-    kernel = np.ones(DISPLAY_SMOOTHING_BINS) / DISPLAY_SMOOTHING_BINS
-    return np.convolve(values, kernel, mode='same')
-
-
 def plot_prediction(frequencies_hz, signature_db, predictions, metadata,
                     excess_db):
     """Sanity figure: predicted PVC leak vs. the 12 observed PVC sites."""
     apply_urban_labs_style()
     fig, (predicted_ax, observed_ax) = plt.subplots(
-        1, 2, figsize=FIGURE_SIZE, sharey=True)
+        1, 2, figsize=SANITY_FIGURE_SIZE, sharey=True)
     for ax in (predicted_ax, observed_ax):
         ax.axvspan(*PUBLISHED_PVC_BAND_HZ, color=HEALTH_LAB_LIGHT_TEAL,
                    alpha=0.25, linewidth=0)
     predicted_ax.text(PUBLISHED_PVC_BAND_HZ[1] + 15, 25,
-                      'published PVC\nleak energy', fontsize=6.5,
+                      'published PVC\nleak energy',
+                      fontsize=ANNOTATION_FONT_SIZE,
                       color=HEALTH_LAB_TEAL, va='top')
     predicted_ax.plot(frequencies_hz, signature_db, color=TEXT_DARK,
                       linewidth=1.2, linestyle='--',
@@ -219,29 +218,31 @@ def plot_prediction(frequencies_hz, signature_db, predictions, metadata,
                                   bounds['low_loss'], color=color,
                                   alpha=0.35, linewidth=0, label=label)
     predicted_ax.set_title('Predicted: cast-iron leak heard through PVC',
-                           loc='left', fontsize=8)
+                           loc='left', fontsize=PANEL_TITLE_FONT_SIZE)
     handles, labels = predicted_ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper left',
-               bbox_to_anchor=(0.06, 0.915), ncol=3, fontsize=6.5)
+               bbox_to_anchor=(0.06,
+                               0.915), ncol=3, fontsize=ANNOTATION_FONT_SIZE)
     for clip_id in metadata.loc[metadata['pipe_material'] == 'PVC',
                                 'clip_id']:
         color = HIGHLIGHT_PVC_SITES.get(clip_id, UNLABELED_GREY)
         is_highlight = clip_id in HIGHLIGHT_PVC_SITES
         observed_ax.plot(frequencies_hz,
-                         _smooth(excess_db.loc[clip_id].to_numpy()),
+                         moving_average(excess_db.loc[clip_id].to_numpy(),
+                                        DISPLAY_SMOOTHING_BINS),
                          color=color, linewidth=1.1 if is_highlight else 0.5,
                          alpha=1 if is_highlight else 0.7,
                          label=clip_id if is_highlight else None,
                          zorder=3 if is_highlight else 2)
     observed_ax.set_title('Observed: the 12 PVC recordings', loc='left',
-                          fontsize=8)
-    observed_ax.legend(loc='upper right', fontsize=6.5)
+                          fontsize=PANEL_TITLE_FONT_SIZE)
+    observed_ax.legend(loc='upper right', fontsize=ANNOTATION_FONT_SIZE)
     for ax in (predicted_ax, observed_ax):
         ax.axhline(BAND_PRESENT_EXCESS_DB, color=TEXT_GREY, linewidth=0.6,
                    linestyle=':')
         ax.set_xlabel('Pitch (Hz)')
         ax.set_xlim(0, NYQUIST_HZ)
-        ax.grid(axis='x', color='#EFEFEF')
+        ax.grid(axis='x', color=LIGHT_GRID_GREY)
     predicted_ax.set_ylabel('dB above own logger\'s noise floor')
     fig.subplots_adjust(wspace=0.08)
     bottom = add_title_and_note(
@@ -256,11 +257,8 @@ def plot_prediction(frequencies_hz, signature_db, predictions, metadata,
         'published PVC leaks mostly sit; the logger\'s low-pitch response '
         'and leak distances are unknown; the clips appear synthesized.')
     fig.subplots_adjust(top=0.76, bottom=bottom)
-    SANITY_FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = SANITY_FIGURE_DIR / 'sanity_predicted_pvc_leak.png'
-    fig.savefig(output_path, dpi=FIGURE_DPI)
-    plt.close(fig)
-    return output_path
+    return save_figure(fig, SANITY_PVC_FIGURE_PATH.parent,
+                       SANITY_PVC_FIGURE_PATH.stem)
 
 
 def run_pvc_sanity_check():
@@ -275,9 +273,10 @@ def run_pvc_sanity_check():
     frequencies_hz, signature_db = cast_iron_leak_signature(metadata,
                                                             excess_db)
     predictions = predict_pvc_spectra(frequencies_hz, signature_db)
-    TABLE_DIR.mkdir(parents=True, exist_ok=True)
+    make_output_dirs()
     summary = summarize_prediction(predictions)
-    summary.round(1).to_csv(SANITY_PVC_PREDICTION_TABLE_PATH, index=False)
+    summary.round(TABLE_DECIMALS).to_csv(SANITY_PVC_PREDICTION_TABLE_PATH,
+                                         index=False)
     sites = compare_pvc_sites(metadata, excess_db)
     sites.to_csv(SANITY_PVC_SITE_TABLE_PATH, index=False)
     figure_path = plot_prediction(frequencies_hz, signature_db, predictions,
