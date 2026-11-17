@@ -13,7 +13,10 @@ log(prior odds / sample odds) so predictions refer to the 1-in-8 base rate
 Fits: {noise-floor-subtracted, raw} x {all 6 dug sites, each left out} =
 14 fits. Point estimate = full noise-floor fit; range = min-max across all
 14. PVC sites are placed on the same curve with their 250-400 Hz score
-(assumption A8); their contrast size may not be comparable to cast iron's.
+(assumption A8), then discounted toward the base rate by the same
+signature-match weight w used in Model 1's probabilities (U34 0.6, U15
+0.4): p = w x curve p + (1 - w) x base rate. The undiscounted curve value
+is kept as curve_probability.
 
 Outputs
 -------
@@ -133,6 +136,20 @@ def site_probabilities(scores, fits):
     return summary.reset_index()
 
 
+def apply_pvc_discount(summary, model1):
+    """Discount PVC sites by Model 1's signature-match weight w."""
+    weights = model1.set_index('clip_id')['signature_weight']
+    summary = summary.copy()
+    summary['signature_weight'] = summary['clip_id'].map(weights).fillna(
+        1.0)
+    summary['curve_probability'] = summary['confidence']
+    for column in ('confidence', 'probability_low', 'probability_high'):
+        summary[column] = (summary['signature_weight'] * summary[column]
+                           + (1 - summary['signature_weight'])
+                           * HISTORICAL_LEAK_RATE)
+    return summary
+
+
 def held_out_check(scores, fits):
     """Each dug site's probability from the fit that left it out."""
     rows = []
@@ -164,6 +181,9 @@ def write_summary(fits, summary, held_out, model1):
              f'{full["base_rate_shift"]:+.2f} on the log-odds scale.',
              f'- Slope across all 14 fits: {fits["slope"].min():.2f}-'
              f'{fits["slope"].max():.2f} per dB.',
+             '- PVC band sites discounted by the Model 1 signature-match '
+             'weight w (U34 0.6, U15 0.4); undiscounted curve values are in '
+             'curve_probability.',
              f'- Calibration: sum of confidence over {len(summary)} '
              f'scorable undug sites = {summary["confidence"].sum():.1f} vs. '
              f'{expected:.1f} expected at 1 in 8.', '',
@@ -193,7 +213,8 @@ def run_model_two():
     scores = pd.read_csv(MODEL1_SCORES_PATH)
     scores = scores[~scores['clip_id'].isin(ANALYSIS_EXCLUDED_CLIPS)]
     fits = fit_all(scores)
-    summary = site_probabilities(scores, fits)
+    summary = apply_pvc_discount(site_probabilities(scores, fits),
+                                 pd.read_csv(MODEL1_PROBABILITY_PATH))
     held_out = held_out_check(scores, fits)
     TABLE_DIR.mkdir(parents=True, exist_ok=True)
     fits.round(4).to_csv(MODEL2_FITS_PATH, index=False)

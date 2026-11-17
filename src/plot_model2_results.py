@@ -43,8 +43,8 @@ PIPE_COLORS = {'cast_iron': HEALTH_LAB_NAVY, 'pvc': HEALTH_LAB_LIGHT_TEAL}
 PIPE_NAMES = {'cast_iron': 'cast iron', 'pvc': 'PVC'}
 EXTRA_COMPARISON_SITES = ('U32', 'U35')
 S_CURVE_LABEL_OFFSETS = {'U32': (0, 12), 'U36': (0, 9), 'U08': (0, 9),
-                         'U07': (0, 9), 'U17': (-4, 9), 'U15': (0, 9),
-                         'U34': (-6, 8)}
+                         'U07': (0, 9), 'U17': (-4, 9), 'U15': (16, -3),
+                         'U34': (16, -3)}
 
 
 def _save(fig, file_stem):
@@ -93,6 +93,15 @@ def plot_s_curve(fits, scores, model2):
             va='bottom',
             color=LABEL_COLORS[NO_LEAK_LABEL])
     band_sites = model2[model2['score'] > 1]
+    for record in band_sites[band_sites['signature_weight'] < 1].itertuples():
+        ax.scatter(record.score, record.curve_probability, s=46,
+                   marker=PIPE_MARKERS[record.ranking], facecolor='white',
+                   edgecolor=PIPE_COLORS[record.ranking], linewidth=1,
+                   zorder=5)
+        ax.annotate('', xy=(record.score, record.confidence),
+                    xytext=(record.score, record.curve_probability),
+                    arrowprops=dict(arrowstyle='->', color=TEXT_GREY,
+                                    linewidth=0.8), zorder=4)
     for record in band_sites.itertuples():
         ax.scatter(record.score, record.confidence, s=46,
                    marker=PIPE_MARKERS[record.ranking],
@@ -119,7 +128,10 @@ def plot_s_curve(fits, scores, model2):
         Line2D([], [], marker='o', linestyle='', color=HEALTH_LAB_NAVY,
                label='Undug cast iron'),
         Line2D([], [], marker='^', linestyle='', color=HEALTH_LAB_LIGHT_TEAL,
-               label='Undug PVC (250-400 Hz score)')]
+               label='Undug PVC, after signature discount'),
+        Line2D([], [], marker='^', linestyle='', markerfacecolor='white',
+               color=HEALTH_LAB_LIGHT_TEAL,
+               label='Undug PVC, on the curve before discount')]
     ax.legend(handles=handles, loc='upper left', bbox_to_anchor=(0.0, 0.93),
               fontsize=6.5)
     bottom = add_title_and_note(
@@ -128,10 +140,11 @@ def plot_s_curve(fits, scores, model2):
         'Firth-penalized logistic regression of dig outcome on the Model 1 '
         'score, fitted to the six dug sites and shifted from their 50% leak '
         'share to the 1-in-8 base rate. Grey curves refit the model on the '
-        'raw-spectrum scores and with each dug site left out. PVC sites sit '
-        'on the same curve using their 250-400 Hz score, whose intenseness '
-        '(dB contrast) may not be comparable to the cast-iron band. U40 '
-        'excluded (sensor overloaded).')
+        'raw-spectrum scores and with each dug site left out. PVC sites are '
+        'read off the curve at their 250-400 Hz score (hollow), then '
+        'discounted toward the base rate by the share of leak-signature '
+        'properties their band shares (filled; U34 3 of 5, U15 2 of 5). U40 '
+        'excluded (insufficient data quality).')
     fig.subplots_adjust(top=0.9, bottom=bottom, left=0.1, right=0.98)
     return _save(fig, 'model2_fig5_s_curve')
 
@@ -172,20 +185,21 @@ def plot_model_comparison(model1, model2):
     ax.grid(axis='x', color='#EFEFEF')
     handles = [
         Line2D([], [], marker='o', color=HEALTH_LAB_NAVY,
-               label='Model 1: any persistent band counts the same'),
+               label='Model 1: presence first, then band quality'),
         Line2D([], [], marker='D', color=UCHICAGO_MAROON,
                label='Model 2: chance rises with intenseness (dB contrast)')]
     ax.legend(handles=handles, loc='lower right', fontsize=6.5)
     bottom = add_title_and_note(
-        fig, 6, 'The two models agree on the order, not on how sure to be',
+        fig, 6, 'Both models flag the same sites but rank them differently',
         'Markers are each model\'s main estimate; bars are its range across '
-        'analysis choices; dashed line is the 1-in-8 base rate. Model 1 '
-        'gives every persistent-band site the same chance (43%). Model 2 '
-        'grades them by band intenseness (contrast: band power minus the '
-        'mean of its neighboring bands, in dB): only U34, U15 and U17 stay '
+        'analysis choices; dashed line is the 1-in-8 base rate. Both apply '
+        'the same PVC signature discount. Model 1 gives every cast-iron site '
+        'with a persistent band 36-50% and grades within that by steadiness '
+        '(weighted 0.6) and intenseness (0.4), so those four sites lead. '
+        'Model 2 grades by intenseness alone (contrast in dB): U34 leads, '
+        'U17 and U15 stay '
         'above the base rate, U07 sits at it, and U08 and U36 fall below '
-        'it. Sites without a '
-        'persistent band are low under both models.')
+        'it. Sites without a persistent band are low under both models.')
     fig.subplots_adjust(top=0.9, bottom=bottom, left=0.25, right=0.98)
     return _save(fig, 'model2_fig6_model_comparison')
 
