@@ -65,7 +65,7 @@ KEY_FEATURES = ('rms_loudness', 'loudness_variability', 'transient_share',
                 'spectral_flatness', 'spectral_centroid_hz')
 
 
-def _result(check, error_type, status, finding):
+def make_check_result(check, error_type, status, finding):
     """Package one check's outcome."""
     return {'check': check, 'error_type': error_type, 'status': status,
             'finding': finding}
@@ -91,7 +91,7 @@ def check_file_inventory(metadata):
     extra = sorted(found_files - expected_files)
     is_ok = (not missing and not extra
              and len(metadata) == N_CLIPS_EXPECTED)
-    return _result(
+    return make_check_result(
         'File inventory and linkage', 'Row (coverage)',
         PASS if is_ok else FLAG,
         f'{len(metadata)} metadata rows; {len(found_files)} clip files; '
@@ -105,7 +105,7 @@ def check_unique_identifiers(metadata):
     prefix_matches = (metadata['clip_id'].str[0].eq('L')
                       == metadata['is_labeled']).all()
     is_ok = n_dup_clips == 0 and n_dup_sites == 0 and prefix_matches
-    return _result(
+    return make_check_result(
         'Unique identifiers (one recording per site)', 'Row (coverage)',
         PASS if is_ok else FLAG,
         f'Duplicate clip_id: {n_dup_clips}; duplicate site_id: '
@@ -122,7 +122,7 @@ def check_label_integrity(metadata):
     counts_ok = (len(labeled) == N_LABELED_EXPECTED
                  and len(unlabeled) == N_UNLABELED_EXPECTED)
     is_ok = has_valid_labels and unlabeled_blank and counts_ok
-    return _result(
+    return make_check_result(
         'Label integrity', 'Column (specification)',
         PASS if is_ok else FLAG,
         f'{len(labeled)} labeled ({labeled["label"].value_counts().to_dict()})'
@@ -140,7 +140,7 @@ def check_metadata_domains(metadata):
     latest = metadata.loc[metadata['overnight_hour'].idxmax(),
                           'recorded_at']
     is_ok = not (bad_logger.any() or bad_pipe.any() or bad_time.any())
-    return _result(
+    return make_check_result(
         'Metadata value domains', 'Column (specification)',
         PASS if is_ok else FLAG,
         f'Invalid logger: {bad_logger.sum()}; invalid pipe: '
@@ -159,7 +159,7 @@ def check_signal_shape(clip_tables):
         or len(df) != SAMPLES_PER_CLIP
         or not np.isfinite(df.to_numpy()).all()
     ]
-    return _result(
+    return make_check_result(
         'Signal length, columns, missing values', 'Cell (measurement)',
         PASS if not problems else FLAG,
         f'{len(clip_tables) - len(problems)} of {len(clip_tables)} clips '
@@ -176,7 +176,7 @@ def check_time_grid(clip_tables):
     }
     bad = [clip_id for clip_id, gap in worst_gap.items()
            if gap > TIME_GRID_TOLERANCE_SECONDS]
-    return _result(
+    return make_check_result(
         'Uniform time grid at 4,000 Hz', 'Cell (measurement)',
         PASS if not bad else FLAG,
         f'Largest deviation from the ideal grid: '
@@ -188,7 +188,7 @@ def check_amplitude_range(amplitudes):
     out_of_range = [clip_id for clip_id, amplitude in amplitudes.items()
                     if np.max(np.abs(amplitude)) > AMPLITUDE_LIMIT]
     overall_peak = max(np.max(np.abs(a)) for a in amplitudes.values())
-    return _result(
+    return make_check_result(
         'Amplitude within [-1, 1]', 'Cell (measurement)',
         PASS if not out_of_range else FLAG,
         f'Largest |amplitude| across all clips: {overall_peak:.3f}. '
@@ -209,7 +209,7 @@ def check_csv_matches_wav(metadata, amplitudes):
     mismatched = [clip_id for clip_id, diff in worst_difference.items()
                   if diff > CSV_WAV_TOLERANCE]
     is_ok = not mismatched and not bad_rates
-    return _result(
+    return make_check_result(
         'CSV and WAV agree', 'Cell (measurement)',
         PASS if is_ok else FLAG,
         f'Largest CSV-WAV difference: {max(worst_difference.values()):.1e}'
@@ -224,7 +224,7 @@ def check_clipping(amplitudes):
                       for clip_id, a in amplitudes.items()}
     clipped = {clip_id: f'{count:,} samples ({count / SAMPLES_PER_CLIP:.0%})'
                for clip_id, count in clipped_counts.items() if count > 0}
-    return _result(
+    return make_check_result(
         'Clipping (sensor overload)', 'Cell (measurement)',
         PASS if not clipped else FLAG,
         f'Clips with samples at |amplitude| >= {CLIPPING_THRESHOLD} (the '
@@ -238,7 +238,7 @@ def check_dropouts(amplitudes):
                     for clip_id, a in amplitudes.items()}
     flagged = {k: v for k, v in longest_runs.items()
                if v > MAX_ALLOWED_FLATLINE_SAMPLES}
-    return _result(
+    return make_check_result(
         'Dropouts / flatlined segments', 'Cell (measurement)',
         PASS if not flagged else FLAG,
         f'Longest run of identical samples in any clip: '
@@ -253,7 +253,7 @@ def check_offset_and_silence(amplitudes, clip_features):
     worst_offset_clip = max(means, key=lambda k: abs(means[k]))
     silent = clip_features.loc[
         clip_features['rms_loudness'] < NEAR_SILENT_RMS, 'clip_id'].tolist()
-    return _result(
+    return make_check_result(
         'DC offset and dead recordings', 'Cell (measurement)',
         PASS if not silent else FLAG,
         f'Largest mean offset: {means[worst_offset_clip]:+.4f} '
@@ -278,7 +278,7 @@ def check_duplicate_recordings(amplitudes):
     near_duplicates = [pair for pair, r in pair_correlations.items()
                        if abs(r) >= DUPLICATE_CORRELATION_THRESHOLD]
     is_ok = n_exact_duplicates == 0 and not near_duplicates
-    return _result(
+    return make_check_result(
         'Duplicate or copied recordings', 'Row (coverage)',
         PASS if is_ok else FLAG,
         f'Exact duplicates: {n_exact_duplicates}. Most similar pair '
@@ -296,7 +296,7 @@ def check_label_balance(metadata):
     labeled = metadata[metadata['is_labeled']]
     leak_share = labeled['is_leak'].mean()
     expected_leaks = HISTORICAL_LEAK_RATE * N_UNLABELED_EXPECTED
-    return _result(
+    return make_check_result(
         'Label balance vs. historical base rate', 'Row (coverage)', FLAG,
         f'Labeled sample is {leak_share:.0%} leaks ({labeled["is_leak"].sum()}'
         f' of {len(labeled)}) vs. ~{HISTORICAL_LEAK_RATE:.1%} historically. '
@@ -331,7 +331,7 @@ def check_coverage(metadata):
         for level in unlabeled[column].unique()
         if level not in set(labeled[column])
     ]
-    return _result(
+    return make_check_result(
         'Coverage: labeled vs. unlabeled sites', 'Row (coverage)',
         FLAG if uncovered else PASS,
         f'Levels present among undug sites but absent from dug sites: '
@@ -355,7 +355,7 @@ def check_label_confounding(metadata):
                                labeled['label']).to_dict()
     n_commute_unlabeled = metadata.loc[~metadata['is_labeled'],
                                        'is_commute_hours'].sum()
-    return _result(
+    return make_check_result(
         'Label confounded with recording time or logger',
         'Column (specification)',
         FLAG if is_time_separated else PASS,
@@ -390,7 +390,7 @@ def check_feature_outliers(clip_features):
         for clip_id, z in zip(clip_features['clip_id'], z_scores):
             if abs(z) > OUTLIER_ROBUST_Z:
                 flagged.setdefault(clip_id, []).append(feature)
-    return _result(
+    return make_check_result(
         'Feature outliers (robust z > 3.5)', 'Cell (measurement)',
         FLAG if flagged else PASS,
         f'{len(flagged)} clips extreme on at least one feature: '
@@ -405,7 +405,7 @@ def check_feature_redundancy(clip_features):
         for first, second in combinations(FEATURE_COLUMNS, 2)
         if abs(correlations.loc[first, second]) >= REDUNDANT_CORRELATION
     ]
-    return _result(
+    return make_check_result(
         'Feature redundancy and dimensionality', 'Column (specification)',
         INFO,
         f'{len(FEATURE_COLUMNS)} candidate features vs. '
@@ -431,7 +431,7 @@ def check_logger_effect(clip_features):
     """Do logger models A and B record systematically different sound?"""
     unlabeled = clip_features[~clip_features['is_labeled']]
     summaries = _group_difference(unlabeled, 'logger_model', 'A', 'B')
-    return _result(
+    return make_check_result(
         'Device effect: logger A vs. B (undug sites)',
         'Column (specification)', INFO,
         'A vs B. ' + '; '.join(summaries) + '. Small p suggests the device'
@@ -444,7 +444,7 @@ def check_pipe_effect(clip_features):
     unlabeled = clip_features[~clip_features['is_labeled']]
     summaries = _group_difference(unlabeled, 'pipe_material',
                                   'cast_iron', 'PVC')
-    return _result(
+    return make_check_result(
         'Pipe-material effect: cast iron vs. PVC (undug sites)',
         'Column (specification)', INFO,
         'Cast iron vs PVC. ' + '; '.join(summaries) + '.')
@@ -457,26 +457,34 @@ def check_clock_time_effect(clip_features):
         rho, p_value = stats.spearmanr(clip_features['overnight_hour'],
                                        clip_features[feature])
         summaries.append(f'{feature}: rho={rho:+.2f} (p={p_value:.2f})')
-    return _result(
+    return make_check_result(
         'Clock-time effect on features (all 46 clips)',
         'Column (specification)', INFO,
         'Spearman correlation with recording time. '
         + '; '.join(summaries) + '.')
 
 
-def write_check_tables(check_results):
-    """Save the ordered check results as CSV and Markdown."""
+def write_check_tables(check_results, csv_path=DATA_CHECKS_CSV_PATH,
+                       markdown_path=DATA_CHECKS_MARKDOWN_PATH):
+    """Save ordered check results as CSV and as a Markdown table.
+
+    Any keys beyond the standard four (e.g., 'section') become extra
+    leading columns.
+    """
     results = pd.DataFrame(check_results)
     results.insert(0, 'order', range(1, len(results) + 1))
     TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    results.to_csv(DATA_CHECKS_CSV_PATH, index=False)
-    markdown_lines = ['| # | Check | Error type | Status | Finding |',
-                      '|---|---|---|---|---|']
+    results.to_csv(csv_path, index=False)
+    columns = list(results.columns)
+    markdown_lines = [
+        '| ' + ' | '.join(column.replace('_', ' ').capitalize()
+                          for column in columns) + ' |',
+        '|' + '---|' * len(columns)]
     markdown_lines += [
-        f'| {row.order} | {row.check} | {row.error_type} | {row.status} | '
-        f'{row.finding} |' for row in results.itertuples()]
-    DATA_CHECKS_MARKDOWN_PATH.write_text('\n'.join(markdown_lines) + '\n',
-                                         encoding='utf-8')
+        '| ' + ' | '.join(str(value).replace('|', '/') for value in row)
+        + ' |' for row in results.itertuples(index=False)]
+    markdown_path.write_text('\n'.join(markdown_lines) + '\n',
+                             encoding='utf-8')
     return results
 
 

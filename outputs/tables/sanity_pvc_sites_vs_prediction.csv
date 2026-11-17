@@ -1,0 +1,13 @@
+clip_id,logger_model,recorded_at,db_above_floor_250_400,db_above_floor_300_600,db_above_floor_900_1300,reading
+U03,B,23:32,19.3,15.3,15.7,"flat or rising to 1,300 Hz: unlike a PVC leak (plastic removes high pitches)"
+U15,B,03:45,12.7,0.7,0.0,energy only below 400 Hz: not produced by filtering the cast-iron band
+U18,A,02:53,-0.3,-0.2,-0.0,at floor: consistent with no leak or a distant leak
+U19,A,03:13,-0.4,-0.3,0.0,at floor: consistent with no leak or a distant leak
+U20,A,01:44,-0.1,0.0,-0.1,at floor: consistent with no leak or a distant leak
+U25,A,23:27,2.6,2.1,1.9,at floor: consistent with no leak or a distant leak
+U28,A,06:17,19.5,19.7,20.7,"flat or rising to 1,300 Hz: unlike a PVC leak (plastic removes high pitches)"
+U29,A,01:37,6.0,9.7,8.9,"flat or rising to 1,300 Hz: unlike a PVC leak (plastic removes high pitches)"
+U31,B,02:27,8.7,10.8,9.3,"flat or rising to 1,300 Hz: unlike a PVC leak (plastic removes high pitches)"
+U32,A,02:35,13.7,14.7,15.1,"flat or rising to 1,300 Hz: unlike a PVC leak (plastic removes high pitches)"
+U33,B,02:59,0.0,0.0,0.0,at floor: consistent with no leak or a distant leak
+U34,A,01:46,19.0,0.4,-0.2,energy only below 400 Hz: not produced by filtering the cast-iron band

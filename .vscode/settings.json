@@ -1,9 +1,10 @@
 {
-    // Use the project's conda env (built from environment.yml)
-    "python.defaultInterpreterPath": "C:\Users\ValerieFranchitti\.anaconda-desktop\micromamba\envs\cpu\envs\chicago\python.exe",
-    "python.terminal.activateEnvironment": true,
-    "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    // Use the project's conda env (built from environment.yml) directly.
+    // conda itself is not on PATH (Anaconda Desktop), so VS Code must not
+    // try to "activate" the env in terminals; it calls this python.exe.
+    "python.defaultInterpreterPath": "C:/Users/ValerieFranchitti/.anaconda-desktop/micromamba/envs/cpu/envs/chicago/python.exe",
+    "python.terminal.activateEnvironment": false,
+    "python.condaPath": "C:/Users/ValerieFranchitti/.anaconda-desktop/micromamba/envs/cpu/Scripts/conda.exe",
 
     // Run scripts from the repo root so src/config.py paths resolve
     "python.terminal.executeInFileDir": false,

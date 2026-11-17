@@ -36,6 +36,8 @@ from src.config import (
     NO_LEAK_LABEL,
     NYQUIST_HZ,
     SAMPLE_RATE_HZ,
+    SPECTROGRAM_OVERLAP_SAMPLES,
+    SPECTROGRAM_SEGMENT_SAMPLES,
     TRANSIENT_LOUDNESS_RATIO,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
@@ -105,8 +107,6 @@ SCATTER_LABEL_OFFSETS = [(5, 3), (5, -10), (-24, 3), (-24, -10), (5, 12),
 HISTOGRAM_MIN_DENSITY = 1e-5        # floor for the log-density axis
 # Extra bottom margin (figure fraction) for rotated heatmap labels.
 CORRELATION_TICK_LABEL_ALLOWANCE = 0.16
-SPECTROGRAM_SEGMENT_SAMPLES = 256   # 64 ms windows
-SPECTROGRAM_OVERLAP_SAMPLES = 128
 SPECTROGRAM_DB_FLOOR_PERCENTILE = 5
 SPECTROGRAM_DB_CEILING_PERCENTILE = 99.5
 POWER_TO_DB = 10

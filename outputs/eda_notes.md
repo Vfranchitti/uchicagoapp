@@ -14,6 +14,31 @@ are about specification (what a variable really measures), and cell errors
 are about measurement (whether each value is right). Sample bias and
 confounding come from ch. 11, and visualization principles from ch. 6.
 
+## 0. Working assumptions (agreed 2026-11-17)
+
+The task says loggers were "left overnight to record short clips of sound
+from the pipe." We assume:
+
+1. **One 5-second clip per site,** probably a cost or device limit. There is
+   no repeat measurement to average, so each site's features carry the full
+   noise of a single clip.
+2. **Clip timing was effectively random.** Recording time should then be
+   unrelated to leak status. The perfect time split among the 6 dug sites
+   (leaks before 3:30 am, non-leaks after 4:15 am) is chance, or comes from
+   how dug sites were chosen. It is not a leak signal, so time must not be
+   used as a predictor.
+3. **Loggers were allocated in proportion across pipe types and
+   assigned randomly within each pipe type** (updated 2026-11-17).
+   - Each logger covers about the same share of PVC sites: A on 8 of its
+     30 sites (27%), B on 4 of its 16 (25%).
+   - "What we had in the shop" suggests there was no further targeting.
+   - The ~3x loudness difference between loggers is then a device effect,
+     not a site difference. That justifies standardizing features within
+     each logger model.
+
+Still unknown: how the 6 dug sites were chosen. Their 50% leak share
+suggests they were chosen because they seemed suspicious.
+
 ## 1. Data checks, in order of importance
 
 Checks earlier in the list can invalidate everything after them. Full
@@ -71,6 +96,11 @@ The tags mark what each figure is good for:
 | 14 | `eda_14_quality_spotlight` | Flagged recordings | Lay |
 | 15 | `eda_15_all_spectrograms` | Time × frequency, all 46 clips, by logger × pipe | Accurate |
 | 16 | `eda_16_descriptive_overview` | Counts by logger, pipe, dig status, clock hour | Lay |
+| 17 | `eda_17_base_rate_false_alarms` | Positive predictive value at 1 in 8 vs. 50% | Lay |
+| 18 | `eda_18_logger_noise_floors` | Logger A vs. B noise floors (U34 excluded) | Accurate |
+| 19 | `eda_19_excess_over_noise_floor` | dB above own logger's floor, all clips | Accurate |
+| 20 | `eda_20_cluster_dendrogram` | Ward clustering + feature profiles (U40 excluded) | Accurate |
+| 21 | `eda_21_cluster_map` | K-means clusters on two key features (U40 excluded) | Interpretable |
 
 **Accuracy vs. interpretability.** The most information-dense views are the
 spectrograms, spectra and principal components (Figs 5, 6, 12). They also
@@ -107,6 +137,16 @@ shows what a bad recording looks like.
 5. **Many undug clips are near-silent, steady background.** About 15 have
    RMS of roughly 0.004–0.009. Steadiness alone would score these as
    "hiss," so steadiness has to be paired with spectral shape.
+7. **The recordings look synthesized** (`notes/cast_iron_realism_checks.md`).
+   - **Realistic:** the leak band's pitch (field studies of iron mains
+     average 220–1,400 Hz), steadiness, the recording format, and 120 Hz
+     hum at U02, U15, U16 and U22.
+   - **Unrealistic:** brick-wall band edges (about 20 dB within one 4 Hz
+     step), three leaks of identical loudness, flat bands with no
+     resonances, and a few noise blocks reused across sites.
+   - **What it means:** state in the memo that performance on real pipes is
+     untested. The literature also says the cast-iron band rule should not
+     be used on PVC (`notes/pvc_attenuation_research.md`).
 6. **Two recordings have quality problems.** U40 is clipped and has a
    dropout. U35 is dominated by a single impact. Use burst-resistant
    features, such as median-window statistics, and flag both clips in the

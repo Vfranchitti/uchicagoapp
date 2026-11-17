@@ -1,0 +1,41 @@
+clip_id,prediction,confidence,confidence_low,confidence_high,leak_flag,note
+U01,no_leak,0.02,0.02,0.034,0,
+U02,no_leak,0.02,0.02,0.034,0,
+U03,no_leak,0.02,0.02,0.034,0,
+U04,no_leak,0.02,0.02,0.034,0,
+U05,no_leak,0.02,0.02,0.034,0,
+U06,no_leak,0.02,0.02,0.034,0,
+U07,leak,0.478,0.364,0.5,1,dig 2
+U08,leak,0.46,0.02,0.5,1,band falls below a cut-off in raw version; dig 3
+U09,no_leak,0.02,0.02,0.034,0,
+U10,no_leak,0.02,0.02,0.034,0,
+U11,no_leak,0.02,0.02,0.034,0,
+U12,no_leak,0.02,0.02,0.034,0,
+U13,no_leak,0.02,0.02,0.034,0,
+U14,no_leak,0.02,0.02,0.034,0,
+U15,leak,0.263,0.083,0.275,1,PVC 250-400 Hz band; assumed leak signature; band falls below a cut-off in raw version
+U16,no_leak,0.02,0.02,0.034,0,
+U17,leak,0.489,0.364,0.5,1,dig 1
+U18,no_leak,0.02,0.02,0.034,0,
+U19,no_leak,0.02,0.02,0.034,0,
+U20,no_leak,0.02,0.02,0.034,0,
+U21,no_leak,0.02,0.02,0.034,0,
+U22,no_leak,0.02,0.02,0.034,0,
+U23,no_leak,0.02,0.02,0.034,0,
+U24,no_leak,0.02,0.02,0.034,0,
+U25,no_leak,0.02,0.02,0.034,0,
+U26,no_leak,0.02,0.02,0.034,0,
+U27,no_leak,0.021,0.02,0.034,0,
+U28,no_leak,0.02,0.02,0.034,0,
+U29,no_leak,0.02,0.02,0.034,0,
+U30,no_leak,0.02,0.02,0.034,0,
+U31,no_leak,0.02,0.02,0.034,0,
+U32,no_leak,0.024,0.02,0.034,0,
+U33,no_leak,0.02,0.02,0.034,0,
+U34,leak,0.349,0.268,0.35,1,PVC 250-400 Hz band; assumed leak signature; dig 5 (informative)
+U35,no_leak,0.021,0.02,0.034,0,
+U36,leak,0.426,0.02,0.5,1,band falls below a cut-off in raw version; dig 4
+U37,no_leak,0.02,0.02,0.034,0,
+U38,no_leak,0.02,0.02,0.034,0,
+U39,no_leak,0.02,0.02,0.034,0,
+U40,excluded: insufficient data quality,,,,,"low-quality recording, not fit for analysis: signal saturation (about 15% of samples clipped at sensor full scale) and a 1.2 s dropout (constant zero-valued samples); amplitude and spectral features are invalid, so no prediction is made"

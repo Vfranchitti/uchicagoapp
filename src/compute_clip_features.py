@@ -15,9 +15,14 @@ from scipy import signal, stats
 from src.config import (
     CLIP_FEATURES_PATH,
     ENVELOPE_WINDOW_SAMPLES,
+    EXCESS_BANDS_HZ,
     FREQUENCY_BAND_EDGES_HZ,
     HIGH_PITCH_CUTOFF_HZ,
+    HUM_FUNDAMENTAL_HZ,
+    HUM_HALF_WIDTH_HZ,
     SAMPLE_RATE_HZ,
+    SPECTROGRAM_OVERLAP_SAMPLES,
+    SPECTROGRAM_SEGMENT_SAMPLES,
     TABLE_DIR,
     TRANSIENT_LOUDNESS_RATIO,
     WELCH_SEGMENT_SAMPLES,
@@ -46,6 +51,14 @@ FEATURE_LABELS = {
     'high_pitch_share': 'Energy share above 500 Hz',
 }
 FEATURE_COLUMNS = list(FEATURE_LABELS)
+# Added for clustering; kept out of FEATURE_COLUMNS so earlier EDA outputs
+# (correlations, PCA, outlier checks) stay as published.
+BAND_DYNAMICS_LABELS = {
+    'typical_window_rms': 'Typical loudness (median of 50 ms RMS)',
+    'leak_band_level_variability_db':
+        'Leak-band steadiness (SD over time of 400-1,300 Hz power, dB)',
+}
+POWER_TO_DB = 10
 
 
 def compute_rms_envelope(amplitude):
@@ -71,6 +84,29 @@ def find_longest_constant_run(amplitude):
     run_lengths = np.diff(run_boundaries)
     longest = int(np.argmax(run_lengths))
     return int(run_boundaries[longest]), int(run_lengths[longest])
+
+
+def remove_hum_lines(frequencies_hz, values):
+    """Interpolate across narrow bins at 120 Hz multiples (electrical hum).
+
+    Works on any spectrum-like array whose first axis matches
+    frequencies_hz (1-D spectrum or 2-D frequency x time).
+    """
+    distance_to_line = np.abs(
+        (frequencies_hz + HUM_FUNDAMENTAL_HZ / 2) % HUM_FUNDAMENTAL_HZ
+        - HUM_FUNDAMENTAL_HZ / 2)
+    is_hum = (distance_to_line <= HUM_HALF_WIDTH_HZ) & (frequencies_hz > 0)
+    cleaned = np.array(values, dtype=float, copy=True)
+    if cleaned.ndim == 1:
+        cleaned[is_hum] = np.interp(frequencies_hz[is_hum],
+                                    frequencies_hz[~is_hum],
+                                    cleaned[~is_hum])
+        return cleaned
+    for frame in range(cleaned.shape[1]):
+        cleaned[is_hum, frame] = np.interp(frequencies_hz[is_hum],
+                                           frequencies_hz[~is_hum],
+                                           cleaned[~is_hum, frame])
+    return cleaned
 
 
 def compute_welch_psd(amplitude):
@@ -132,11 +168,36 @@ def summarize_spectrum(amplitude):
     return features
 
 
+def summarize_band_dynamics(amplitude):
+    """Burst-resistant loudness and how steady the leak band is over time.
+
+    typical_window_rms: median 50 ms loudness, so brief traffic bursts do
+    not inflate it. leak_band_level_variability_db: standard deviation
+    over time of 400-1,300 Hz power in dB. The crew chief's "it doesn't
+    stop" applied to the band: a steady leak gives a small value. dB is
+    used rather than a raw coefficient of variation so one loud burst does
+    not dominate.
+    """
+    _, window_rms = compute_rms_envelope(amplitude)
+    frequencies_hz, _, power = signal.spectrogram(
+        amplitude, fs=SAMPLE_RATE_HZ, nperseg=SPECTROGRAM_SEGMENT_SAMPLES,
+        noverlap=SPECTROGRAM_OVERLAP_SAMPLES)
+    low_hz, high_hz = EXCESS_BANDS_HZ['leak_band_400_1300']
+    is_leak_band = (frequencies_hz > low_hz) & (frequencies_hz <= high_hz)
+    band_power_db = POWER_TO_DB * np.log10(
+        power[is_leak_band].sum(axis=0) + np.finfo(float).tiny)
+    return {
+        'typical_window_rms': np.median(window_rms),
+        'leak_band_level_variability_db': np.std(band_power_db),
+    }
+
+
 def summarize_clip(amplitude):
     """Combine all per-clip features into one dict."""
     return {**summarize_loudness(amplitude),
             **summarize_steadiness(amplitude),
-            **summarize_spectrum(amplitude)}
+            **summarize_spectrum(amplitude),
+            **summarize_band_dynamics(amplitude)}
 
 
 def build_clip_feature_table(metadata, amplitudes):
