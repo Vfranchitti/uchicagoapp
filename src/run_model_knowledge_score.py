@@ -15,6 +15,17 @@ PVC sites (separate ranking; unconfirmed signature, low confidence)
 Two versions: 'floor' (spectra minus each logger's noise floor; main) and
 'raw' (spectra as recorded; robustness check). U40 is excluded.
 
+Final model additions (2026-11-19), main version only
+    has_band            presence from steady-band detection
+                        (src/detect_steady_bands.py): a steady band in the
+                        recording's L90 spectrum, distinct from its
+                        material's shared background and from both sides.
+                        The raw version keeps the frame rule (persistence
+                        >= 90% and contrast >= 3 dB) as a robustness check.
+    corrected_level_db  the band's steady power minus its neighbors' steady
+                        power (dB above floor); PVC uses each site's
+                        detected band and only the upper neighbor.
+
 Checks: 9-pair ranking check on the dug sites; leave-one-out over all six
 dug sites; agreement with the clustering; floor vs. raw.
 
@@ -32,14 +43,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import Patch
-from scipy import signal, stats
+from scipy import stats
 
-from src.analyze_noise_floor import (
-    compute_clip_spectra_db,
-    compute_excess_spectra,
-    compute_logger_baselines,
-    identify_floor_clips,
-)
+from src.analyze_noise_floor import identify_floor_clips
 from src.compute_clip_features import (
     build_clip_feature_table,
     remove_hum_lines,
@@ -51,6 +57,7 @@ from src.config import (
     DUG_LABELS,
     EXCESS_BANDS_HZ,
     LEAK_LABEL,
+    MAIN_VERSION,
     MAX_DIGS_THIS_WEEK,
     MODEL1_LOO_PATH,
     MODEL1_SCORES_PATH,
@@ -61,12 +68,16 @@ from src.config import (
     NYQUIST_HZ,
     PERSISTENCE_CONTRAST_DB,
     PERSISTENCE_CUTOFF,
+    PERSISTENT_BAND_MIN_CONTRAST_DB,
     PVC_BAND_KEY,
     PVC_NEIGHBOR_KEYS,
-    SAMPLE_RATE_HZ,
-    SPECTROGRAM_OVERLAP_SAMPLES,
-    SPECTROGRAM_SEGMENT_SAMPLES,
     TABLE_DECIMALS,
+)
+from src.detect_steady_bands import (
+    band_presence,
+    corrected_band_level,
+    detect_all_bands,
+    steady_spectra,
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.measure_band_geometry import find_band
@@ -83,56 +94,14 @@ from src.plot_style import (
     save_figure,
 )
 from src.run_clustering import leak_cluster_members
-from src.utils import in_band, make_output_dirs, to_db
+from src.spectral_inputs import build_spectral_inputs
+from src.utils import in_band, make_output_dirs
 
 # Lower neighbor of the cast-iron band starts above the logger's low shelf.
 CAST_IRON_LOWER_NEIGHBOR_START_HZ = 250
 GROUP_COLORS = {**LABEL_COLORS, 'unlabeled': HEALTH_LAB_NAVY}
 CAST_IRON_FIGURE = (7.5, 8.6)
 PVC_FIGURE = (7.5, 4.2)
-
-
-# ---------------------------------------------------------------------------
-# Spectra
-# ---------------------------------------------------------------------------
-def compute_spectrogram_db(amplitude):
-    """(frequencies_hz, dB array of shape frequency x frame)."""
-    frequencies_hz, _, power = signal.spectrogram(
-        amplitude, fs=SAMPLE_RATE_HZ, nperseg=SPECTROGRAM_SEGMENT_SAMPLES,
-        noverlap=SPECTROGRAM_OVERLAP_SAMPLES)
-    return frequencies_hz, to_db(power)
-
-
-def build_spectral_inputs(metadata, amplitudes):
-    """Whole-clip and frame-level spectra for both versions."""
-    clip_features = build_clip_feature_table(metadata, amplitudes)
-    welch_frequencies_hz, welch_db = compute_clip_spectra_db(metadata,
-                                                             amplitudes)
-    floor_clip_ids = identify_floor_clips(clip_features)
-    welch_baselines = compute_logger_baselines(metadata, welch_db,
-                                               floor_clip_ids)
-    welch_excess = compute_excess_spectra(metadata, welch_db,
-                                          welch_baselines)
-    frames = {clip_id: compute_spectrogram_db(amplitudes[clip_id])
-              for clip_id in metadata['clip_id']}
-    frame_frequencies_hz = next(iter(frames.values()))[0]
-    logger_by_clip = metadata.set_index('clip_id')['logger_model']
-    frame_baselines = {
-        logger: np.median(np.hstack([
-            frames[clip_id][1] for clip_id in floor_clip_ids
-            if logger_by_clip[clip_id] == logger]), axis=1)
-        for logger in logger_by_clip.unique()}
-    frame_db = {
-        'raw': {clip_id: values for clip_id, (_, values) in frames.items()},
-        'floor': {clip_id: values
-                  - frame_baselines[logger_by_clip[clip_id]][:, None]
-                  for clip_id, (_, values) in frames.items()},
-    }
-    clip_db = {'raw': welch_db, 'floor': welch_excess}
-    return {'clip_frequencies_hz': welch_frequencies_hz,
-            'frame_frequencies_hz': frame_frequencies_hz,
-            'clip_db': clip_db, 'frame_db': frame_db,
-            'welch_excess': welch_excess}
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +175,44 @@ def score_group(metadata, inputs, version, band_hz, neighbors_hz,
     scores.loc[is_undug, 'rank_among_undug'] = scores.loc[
         is_undug, 'score'].rank(ascending=False, method='min')
     return scores
+
+
+def detected_pvc_bands(bands):
+    """{clip_id: (low_hz, high_hz)} of each PVC site's strongest band."""
+    found = bands[(bands['pipe_material'] == 'PVC') & bands['is_band']]
+    strongest = found.sort_values('level_db_above_floor').groupby(
+        'clip_id').last()
+    return {clip_id: (row.low_hz, row.high_hz)
+            for clip_id, row in strongest.iterrows()}
+
+
+def add_steady_measures(scores, metadata, steady, bands, leak_band_hz):
+    """Add has_band, corrected_level_db and the measured band edges."""
+    presence = band_presence(bands, metadata)
+    frame_rule = ((scores['persistence'] >= PERSISTENCE_CUTOFF)
+                  & (scores['contrast_db'] >= PERSISTENT_BAND_MIN_CONTRAST_DB))
+    is_main = scores['version'] == MAIN_VERSION
+    scores['has_band'] = np.where(is_main,
+                                  scores['clip_id'].map(presence).astype(bool),
+                                  frame_rule)
+    pvc_edges = detected_pvc_bands(bands)
+    upper_limit_hz = EXCESS_BANDS_HZ['leak_band_400_1300'][1]
+    frequencies_hz = steady.columns.to_numpy()
+    rows = []
+    for record in scores.itertuples():
+        if record.ranking == 'cast_iron':
+            band_hz, neighbors_hz = cast_iron_bands(leak_band_hz)
+        else:
+            band_hz = pvc_edges.get(record.clip_id,
+                                    EXCESS_BANDS_HZ[PVC_BAND_KEY])
+            neighbors_hz = ((band_hz[1], upper_limit_hz),)
+        rows.append({'corrected_level_db': corrected_band_level(
+                         steady.loc[record.clip_id].to_numpy(),
+                         frequencies_hz, band_hz, neighbors_hz),
+                     'measured_band_low_hz': band_hz[0],
+                     'measured_band_high_hz': band_hz[1]})
+    return pd.concat([scores.reset_index(drop=True), pd.DataFrame(rows)],
+                     axis=1)
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +408,10 @@ def run_model_one():
         + [score_group(pvc_sites, inputs, version, *pvc_bands(), True,
                        'pvc') for version in MODEL_VERSIONS],
         ignore_index=True)
+    steady = steady_spectra(metadata, amplitudes, inputs['floor_clip_ids'])
+    scores = add_steady_measures(scores, metadata, steady,
+                                 detect_all_bands(metadata, steady),
+                                 leak_band_hz)
     loo_table, fold_scores, _ = leave_one_out(metadata, inputs,
                                               cast_iron_sites)
     fold_spread = fold_scores.agg(['min', 'max'], axis=1)

@@ -65,12 +65,12 @@ from src.plot_style import (
 )
 from src.run_model_knowledge_score import (
     band_contrast,
-    build_spectral_inputs,
     cast_iron_bands,
     derive_leak_band,
     leak_clusters_by_setting,
     leave_one_out,
 )
+from src.spectral_inputs import build_spectral_inputs
 from src.utils import moving_average
 
 EXPLAINER_CLIPS = (('L03', LABEL_COLORS[LEAK_LABEL], 'L03 (dug: leak)'),

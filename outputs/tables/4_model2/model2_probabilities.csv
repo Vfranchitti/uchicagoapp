@@ -1,7 +1,7 @@
 clip_id,confidence,probability_low,probability_high,ranking,logger_model,score,signature_weight,curve_probability
 U01,0.0224,0.0211,0.0427,cast_iron,B,0.0,1.0,0.0224
 U02,0.0224,0.0211,0.0427,cast_iron,A,-0.0,1.0,0.0224
-U03,0.0268,0.0094,0.0433,pvc,B,0.7447,1.0,0.0268
+U03,0.0857,0.0788,0.0923,pvc,B,0.7447,0.4,0.0268
 U04,0.0228,0.0214,0.0427,cast_iron,A,0.0763,1.0,0.0228
 U05,0.0223,0.021,0.0427,cast_iron,A,-0.0042,1.0,0.0223
 U06,0.0227,0.0214,0.0428,cast_iron,B,0.066,1.0,0.0227

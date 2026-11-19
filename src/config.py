@@ -70,6 +70,11 @@ MODEL1_SUMMARY_PATH = MODEL1_TABLE_DIR / 'model1_summary.md'
 MODEL1_PROBABILITY_PATH = MODEL1_TABLE_DIR / 'model1_probabilities.csv'
 MODEL1_PROBABILITY_SUMMARY_PATH = (MODEL1_TABLE_DIR
                                    / 'model1_probability_summary.md')
+# Steady-band detection (the presence test of the final Model 1)
+BAND_SCAN_TABLE_PATH = MODEL1_TABLE_DIR / 'band_scan_bands.csv'
+BAND_SCAN_MAP_PATH = MODEL1_TABLE_DIR / 'band_scan_map.csv'
+BAND_SCAN_SUMMARY_PATH = MODEL1_TABLE_DIR / 'band_scan_summary.md'
+BAND_SCAN_FIGURE_PATH = MODEL_FIGURE_DIR / 'band_scan_map.png'
 
 # Stage 4: Model 2 (Firth logistic regression)
 MODEL2_PROBABILITY_PATH = MODEL2_TABLE_DIR / 'model2_probabilities.csv'
@@ -85,6 +90,9 @@ SANITY_PVC_VS_MODEL_PATH = CHECKS_TABLE_DIR / 'sanity_pvc_vs_model_calls.csv'
 SANITY_PVC_FIGURE_PATH = CHECKS_FIGURE_DIR / 'sanity_predicted_pvc_leak.png'
 SELF_TRAINING_TABLE_PATH = CHECKS_TABLE_DIR / 'check_self_training.csv'
 SELF_TRAINING_SUMMARY_PATH = CHECKS_TABLE_DIR / 'check_self_training.md'
+
+# Stage 6: method summary (a diagram; reads no data)
+METHOD_TREE_FIGURE_PATH = MODEL_FIGURE_DIR / 'method_decision_tree.png'
 
 
 # ===========================================================================
@@ -234,9 +242,57 @@ PERSISTENCE_CUTOFF = 0.9
 # above. The PVC band itself is the fixed 250-400 Hz edge band.
 PVC_BAND_KEY = 'edge_250_400'
 PVC_NEIGHBOR_KEYS = ('low_0_250', 'leak_band_400_1300')
-# A site "has a persistent band" when the band is present in at least
-# PERSISTENCE_CUTOFF of frames and stands out at least this much overall.
+# Frame rule (used for the raw version and leave-one-out): a site "has a
+# persistent band" when the band is present in at least PERSISTENCE_CUTOFF
+# of frames and stands out at least this much overall. The main version
+# uses the steady-band detection below instead.
 PERSISTENT_BAND_MIN_CONTRAST_DB = 3.0
+
+# Steady-band detection (approved 2026-11-18; rules fixed before running).
+# First run as a descriptive scan, then adopted (2026-11-19) as the final
+# Model 1 presence test for both pipe materials.
+# Steady level of each pitch: the level the sound stays above for 90% of
+# the recording (10th percentile over short frames; the L90 used for
+# background sound in environmental acoustics). Brief traffic bursts never
+# reach it, so they drop out without discarding frames.
+STEADY_LEVEL_PERCENTILE = 10
+# A recording's own band: a run of pitches at least this far above the
+# shared background of its material (median steady level of the other
+# recordings of that material, leaving the recording itself out).
+SCAN_EXCESS_OVER_SHARED_DB = 3.0
+# ...that also stands at least this far above the pitches on BOTH sides,
+# so an even hiss across all pitches does not count as a band.
+SCAN_FLANK_CONTRAST_DB = 3.0
+SCAN_FLANK_WIDTH_HZ = 100
+# ...and is at least this wide, so single hum lines do not count.
+SCAN_MIN_BAND_WIDTH_HZ = 50
+# Runs split by a gap of at most this many Hz are joined.
+SCAN_MAX_GAP_HZ = 16
+# Revision 2026-11-18, after run 1 (mechanics only; thresholds unchanged):
+# - smooth each steady spectrum over this many Hz (power average), so
+#   frame-to-frame noise does not fragment bands;
+# - split a run where the median level on the two sides differs by at
+#   least this much (a step or a dip; each side at least
+#   SCAN_MIN_BAND_WIDTH_HZ wide), so a band next to rumble or a raised
+#   shelf is judged on its own (run 2 split only at dips, from peaks; run
+#   4 only at dips, from medians, which left steps joined);
+# - the noise floor is measured on the same percentile basis.
+# Run 1 and run 2 (peak-based dips) outputs are kept as band_scan_run1_*
+# and band_scan_run2_* for comparison.
+SCAN_SMOOTHING_HZ = 48
+SCAN_SPLIT_CHANGE_DB = 3.0
+# Revision 2026-11-19, after run 3: steady levels are measured on 250 ms
+# frames (4 Hz resolution, 50% overlap, 39 frames per clip) instead of
+# 64 ms frames (16 Hz), because at 16 Hz the 120 Hz hum lines spread past
+# the +/-8 Hz hum removal and hid U15's and U02's bands. 4 Hz matches the
+# whole-clip spectra the hum removal was designed for. (Widening the hum
+# removal to +/-24 Hz at 16 Hz was tried and rejected: it blurred 40% of
+# the spectrum and merged U08's band with its high-pitch traffic.)
+STEADY_FRAME_SAMPLES = 1000
+STEADY_FRAME_OVERLAP_SAMPLES = 500
+# Cast-iron presence: a detected band covering at least this share of the
+# confirmed-leak band. PVC presence: any detected band (range from data).
+CAST_IRON_BAND_MIN_OVERLAP = 0.5
 
 # Pseudo-counts added to each cell of the 2 x 2 dug-site table, because 3/3
 # and 0/3 would otherwise imply certainty: Jeffreys (0.5) and Laplace (1).
@@ -251,10 +307,19 @@ INFORMATIVE_DIG_SITE = 'U34'
 # quality = steadiness^STEADINESS_WEIGHT x intenseness^INTENSENESS_WEIGHT
 #   steadiness  = persistence over time x coverage across pitch, each
 #                 relative to the dug leaks (capped at 1)
-#   intenseness = contrast in dB relative to the weakest dug leak (capped
-#                 at 1: more intense than a confirmed leak earns no extra)
+#   intenseness = corrected band level relative to the weakest dug leak
+#                 (capped at 1: more intense than a confirmed leak earns no
+#                 extra). Corrected band level (approved 2026-11-19): the
+#                 band's steady power minus its neighbors' steady power
+#                 (power scale), so traffic raising the neighbors no longer
+#                 lowers it. PVC uses only the upper neighbor (400-1,300
+#                 Hz), because rumble makes 0-250 Hz unreliable.
+# The weights are a judgment (steadiness first, from the crew chief's
+# description), not estimated; the alternatives below are reported as a
+# sensitivity check on the order of the band sites.
 STEADINESS_WEIGHT = 0.6
 INTENSENESS_WEIGHT = 0.4
+ALTERNATIVE_QUALITY_WEIGHTS = ((0.5, 0.5), (0.8, 0.2), (1.0, 0.0))
 # PVC signature-match discount: share of these leak-signature properties a
 # PVC band site shares (w), then p = w x graded p + (1 - w) x base rate.
 #   persistent over time       persistence >= PERSISTENCE_CUTOFF

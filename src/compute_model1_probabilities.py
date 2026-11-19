@@ -1,7 +1,10 @@
 """Turn Model 1 scores into leak probabilities: presence first, then quality.
 
-1. Presence sets the tier. A site either has a persistent band (present in
-   at least 90% of 64 ms frames and standing out by at least 3 dB) or not.
+1. Presence sets the tier. A site either has a persistent band or not:
+   in the main version, a steady band found by src/detect_steady_bands.py
+   (its L90 level distinct from the shared background and from both
+   sides); in the raw version (robustness), the frame rule (present in at
+   least 90% of 64 ms frames and standing out by at least 3 dB).
    Bayes' rule updates the 1-in-8 base rate with a likelihood ratio from
    the dug sites (3 of 3 leaks have the band, 0 of 3 non-leaks), smoothed
    two ways (Jeffreys +0.5 and Laplace +1 per cell). That gives each tier a
@@ -10,12 +13,14 @@
        quality = steadiness^0.6 x intenseness^0.4
    steadiness  = persistence over time x coverage across pitch, each
                  relative to the dug leaks (capped at 1);
-   intenseness = contrast in dB relative to the weakest dug leak (capped
-                 at 1, so a band more intense than a confirmed leak earns
-                 nothing extra).
+   intenseness = corrected band level (the band's steady power minus
+                 its neighbors', in dB above floor) relative to the
+                 weakest dug leak (capped at 1, so a band more intense
+                 than a confirmed leak earns nothing extra).
    Quality 1 puts a site at the top of its range; quality 0 at the bottom.
 3. PVC band sites are discounted by how many leak-signature properties
-   their band shares (w, from five properties fixed in advance):
+   their band shares (w, from five properties fixed in advance; width and
+   gap come from each site's detected band):
        p = w x graded p + (1 - w) x base rate.
    PVC sites without a band are graded like cast iron (user decision).
 
@@ -35,6 +40,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import (
+    ALTERNATIVE_QUALITY_WEIGHTS,
     ANALYSIS_EXCLUDED_CLIPS,
     ANALYSIS_EXCLUSION_REASON,
     HISTORICAL_LEAK_RATE,
@@ -66,7 +72,14 @@ SIGNATURE_PROPERTIES = ('persistent_over_time', 'stands_out',
 
 
 def has_persistent_band(scores):
-    """Boolean Series: band present in >= 90% of frames and >= 3 dB."""
+    """Boolean Series: the presence flag of each row.
+
+    Uses has_band (steady-band detection in the main version, frame rule
+    in the raw version) when present; otherwise, as in leave-one-out fold
+    tables, the frame rule: band in >= 90% of frames and >= 3 dB.
+    """
+    if 'has_band' in scores.columns:
+        return scores['has_band'].astype(bool)
     return ((scores['persistence'] >= PERSISTENCE_CUTOFF)
             & (scores['contrast_db'] >= PERSISTENT_BAND_MIN_CONTRAST_DB))
 
@@ -113,48 +126,68 @@ def quality_scores(main, evenness):
                   & (table['label_group'] == LEAK_LABEL)]
     reference = {'persistence': leaks['persistence'].min(),
                  'coverage': leaks['bin_coverage'].min(),
-                 'contrast_db': leaks['contrast_db'].min()}
+                 'corrected_level_db': leaks['corrected_level_db'].min()}
     persistence_match = (table['persistence']
                          / reference['persistence']).clip(0, 1)
     coverage_match = (table['bin_coverage']
                       / reference['coverage']).clip(0, 1)
     table['steadiness'] = persistence_match * coverage_match
-    table['intenseness'] = (table['contrast_db']
-                            / reference['contrast_db']).clip(0, 1)
+    table['intenseness'] = (table['corrected_level_db']
+                            / reference['corrected_level_db']).clip(0, 1)
+    table['intenseness'] = table['intenseness'].fillna(0.0)
     table['quality'] = (table['steadiness'] ** STEADINESS_WEIGHT
                         * table['intenseness'] ** INTENSENESS_WEIGHT)
     return table, reference
 
 
 def signature_match(table, geometry):
-    """Share of five leak-signature properties each PVC band site shares."""
+    """Share of five leak-signature properties each PVC band site shares.
+
+    Leak references (median width, smallest gap above the logger's low
+    shelf) come from the band geometry of the three dug leaks; each PVC
+    site's width and gap come from its detected band.
+    """
     leaks = geometry[geometry['group'] == 'cast-iron leak']
     median_width = leaks['band_width_octaves'].median()
     min_gap = leaks['gap_above_shelf_hz'].min()
-    geometry = geometry.set_index('clip_id')
+    shelf_by_logger = leaks.groupby('logger_model')['shelf_top_hz'].first()
     rows = []
     is_pvc_band = (table['ranking'] == 'pvc') & table['has_band_main']
     for record in table[is_pvc_band].itertuples():
-        if record.clip_id not in geometry.index:
-            raise ValueError(f'No band geometry for {record.clip_id}; add it '
-                             'to PVC_BAND_CLIPS in measure_band_geometry.')
-        site = geometry.loc[record.clip_id]
+        low_hz, high_hz = (record.measured_band_low_hz,
+                           record.measured_band_high_hz)
         checks = {
-            'persistent_over_time': record.persistence >= PERSISTENCE_CUTOFF,
-            'stands_out': (record.contrast_db
-                           >= PERSISTENT_BAND_MIN_CONTRAST_DB),
+            'persistent_over_time': True,   # passed the steady-band test
+            'stands_out': True,             # >= 3 dB above both sides
             'even_across_band': record.bin_coverage >= PERSISTENCE_CUTOFF,
-            'leak_like_width': (abs(site['band_width_octaves']
-                                    - median_width)
+            'leak_like_width': (abs(np.log2(high_hz / low_hz) - median_width)
                                 <= SIGNATURE_WIDTH_TOLERANCE_OCTAVES),
-            'gap_above_background': (site['gap_above_shelf_hz']
-                                     >= SIGNATURE_GAP_FRACTION * min_gap),
+            'gap_above_background': (
+                low_hz - shelf_by_logger[record.logger_model]
+                >= SIGNATURE_GAP_FRACTION * min_gap),
         }
         rows.append({'clip_id': record.clip_id, **checks,
                      'signature_weight': float(np.mean(
                          list(checks.values())))})
     return pd.DataFrame(rows, columns=['clip_id', *SIGNATURE_PROPERTIES,
                                        'signature_weight'])
+
+
+def weight_sensitivity(table):
+    """Order of the undug band sites under alternative quality weights."""
+    band_sites = table[table['has_band_main']
+                       & (table['label_group'] == 'unlabeled')]
+    orders = {}
+    for steady_weight, intense_weight in ((STEADINESS_WEIGHT,
+                                           INTENSENESS_WEIGHT),
+                                          *ALTERNATIVE_QUALITY_WEIGHTS):
+        quality = (band_sites['steadiness'] ** steady_weight
+                   * band_sites['intenseness'] ** intense_weight)
+        orders[(steady_weight, intense_weight)] = (
+            band_sites.assign(q=quality).sort_values(
+                ['ranking', 'q'], ascending=[True, False])['clip_id']
+            .tolist())
+    return orders
 
 
 def _discount(probability, weight):
@@ -166,8 +199,7 @@ def setting_probabilities(scores, lr_table):
     """Two-tier probability under every (version, smoothing) setting."""
     rows = []
     for record in scores.itertuples():
-        is_band = (record.persistence >= PERSISTENCE_CUTOFF
-                   and record.contrast_db >= PERSISTENT_BAND_MIN_CONTRAST_DB)
+        is_band = bool(record.has_band)
         for pseudo_count, (lr_present, lr_absent) in lr_table.items():
             rows.append({'clip_id': record.clip_id,
                          'version': record.version,
@@ -206,20 +238,27 @@ def build_summary(scores, lr_table, evenness, geometry):
     table['has_band_any_version'] = settings.groupby('clip_id')[
         'has_band'].any()
     table['prediction'] = table['has_band_main'].astype(int)
+    sensitivity = weight_sensitivity(table.reset_index())
     table = table[table['label_group'] == 'unlabeled'].reset_index()
-    return table, reference, weights
+    return table, reference, weights, sensitivity
 
 
 def build_dig_list(summary):
-    """Top persistent cast-iron sites by confidence, plus informative dig."""
+    """Top persistent cast-iron sites by confidence, plus informative dig.
+
+    Ties in confidence (sites at the top of the band tier) are broken by
+    the uncapped corrected band level: the stronger band digs first.
+    """
     cast_iron = summary[(summary['ranking'] == 'cast_iron')
                         & summary['has_band_main']]
-    picks = cast_iron.nlargest(MAX_DIGS_THIS_WEEK - 1,
-                               'confidence')['clip_id'].tolist()
+    picks = cast_iron.sort_values(
+        ['confidence', 'corrected_level_db'], ascending=False).head(
+            MAX_DIGS_THIS_WEEK - 1)['clip_id'].tolist()
     return picks + [INFORMATIVE_DIG_SITE]
 
 
-def _write_summary(lr_table, summary, dig_list, reference, weights):
+def _write_summary(lr_table, summary, dig_list, reference, weights,
+                   sensitivity):
     """Plain-language Markdown summary."""
     lines = ['# Model 1 probabilities: presence first, then quality', '',
              f'- {ANALYSIS_EXCLUSION_REASON} No prediction for U40.',
@@ -233,8 +272,11 @@ def _write_summary(lr_table, summary, dig_list, reference, weights):
         f'- Quality = steadiness^{STEADINESS_WEIGHT} x intenseness^'
         f'{INTENSENESS_WEIGHT}. References (weakest dug leak): persistence '
         f'{reference["persistence"]:.3f}, coverage '
-        f'{reference["coverage"]:.2f}, contrast '
-        f'{reference["contrast_db"]:.1f} dB.')
+        f'{reference["coverage"]:.2f}, corrected band level '
+        f'{reference["corrected_level_db"]:.1f} dB.')
+    for (steady_weight, intense_weight), order in sensitivity.items():
+        lines.append(f'- Order of undug band sites with weights '
+                     f'{steady_weight}/{intense_weight}: {order}.')
     for record in weights.itertuples():
         shared = [name for name in SIGNATURE_PROPERTIES
                   if getattr(record, name)]
@@ -269,14 +311,15 @@ def run_model1_probabilities():
                  & scores['label_group'].isin((LEAK_LABEL, NO_LEAK_LABEL))]
     lr_table = {pseudo_count: likelihood_ratios(dug, pseudo_count)
                 for pseudo_count in SMOOTHING_PSEUDO_COUNTS}
-    summary, reference, weights = build_summary(
+    summary, reference, weights, sensitivity = build_summary(
         scores, lr_table, compute_band_evenness(), measure_band_geometry())
     dig_list = build_dig_list(summary)
     summary['dig_priority'] = summary['clip_id'].map(
         {clip_id: rank for rank, clip_id in enumerate(dig_list, start=1)})
     make_output_dirs()
     summary.round(TABLE_DECIMALS).to_csv(MODEL1_PROBABILITY_PATH, index=False)
-    _write_summary(lr_table, summary, dig_list, reference, weights)
+    _write_summary(lr_table, summary, dig_list, reference, weights,
+                   sensitivity)
     return summary, dig_list
 
 

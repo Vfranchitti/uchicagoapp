@@ -183,7 +183,7 @@ def _write_summary(fits, summary, held_out, model1):
              f'- Slope across all 14 fits: {fits["slope"].min():.2f}-'
              f'{fits["slope"].max():.2f} per dB.',
              '- PVC band sites discounted by the Model 1 signature-match '
-             'weight w (U34 0.6, U15 0.4); undiscounted curve values are in '
+             'weight w; undiscounted curve values are in '
              'curve_probability.',
              f'- Calibration: sum of confidence over {len(summary)} '
              f'scorable undug sites = {summary["confidence"].sum():.1f} vs. '

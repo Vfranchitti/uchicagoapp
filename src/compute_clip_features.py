@@ -86,16 +86,17 @@ def find_longest_constant_run(amplitude):
     return int(run_boundaries[longest]), int(run_lengths[longest])
 
 
-def remove_hum_lines(frequencies_hz, values):
+def remove_hum_lines(frequencies_hz, values, half_width_hz=HUM_HALF_WIDTH_HZ):
     """Interpolate across narrow bins at 120 Hz multiples (electrical hum).
 
     Works on any spectrum-like array whose first axis matches
-    frequencies_hz (1-D spectrum or 2-D frequency x time).
+    frequencies_hz (1-D spectrum or 2-D frequency x time). half_width_hz
+    should cover the line's spread at the spectrum's resolution.
     """
     distance_to_line = np.abs(
         (frequencies_hz + HUM_FUNDAMENTAL_HZ / 2) % HUM_FUNDAMENTAL_HZ
         - HUM_FUNDAMENTAL_HZ / 2)
-    is_hum = (distance_to_line <= HUM_HALF_WIDTH_HZ) & (frequencies_hz > 0)
+    is_hum = (distance_to_line <= half_width_hz) & (frequencies_hz > 0)
     cleaned = np.array(values, dtype=float, copy=True)
     if cleaned.ndim == 1:
         cleaned[is_hum] = np.interp(frequencies_hz[is_hum],

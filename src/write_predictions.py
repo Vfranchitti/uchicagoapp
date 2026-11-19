@@ -38,7 +38,7 @@ def _note(record):
     """Short explanation for rows a reader may ask about."""
     notes = []
     if record.ranking == 'pvc' and record.prediction == 1:
-        notes.append('PVC 250-400 Hz band; assumed leak signature')
+        notes.append('steady PVC band near 320-450 Hz; unconfirmed signature')
     if record.prediction == 1 and record.probability_low < record.confidence:
         if record.probability_low < HISTORICAL_LEAK_RATE:
             notes.append('band falls below a cut-off in raw version')

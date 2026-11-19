@@ -37,11 +37,11 @@ from src.config import (
 )
 from src.load_recordings import load_all_amplitudes, load_metadata
 from src.run_model_knowledge_score import (
-    build_spectral_inputs,
     cast_iron_bands,
     derive_leak_band,
     pvc_bands,
 )
+from src.spectral_inputs import build_spectral_inputs
 from src.utils import in_band, make_output_dirs
 
 

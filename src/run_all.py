@@ -26,6 +26,7 @@ PIPELINE = (
     'run_clustering',
     # 3. Model 1 (primary model) and the predictions deliverable
     'run_model_knowledge_score',
+    'detect_steady_bands',
     'compute_model1_probabilities',
     'measure_band_evenness',
     'write_predictions',
@@ -37,6 +38,8 @@ PIPELINE = (
     'sanity_predict_pvc_leak',
     'sanity_compare_pvc_calls',
     'check_self_training',
+    # 6. Method summary (a diagram; reads no data)
+    'plot_method_tree',
 )
 
 
