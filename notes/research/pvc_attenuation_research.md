@@ -199,6 +199,14 @@ PVC leak candidates. The published evidence neither rules them in nor out.
 3. **The damping factor β varies about five-fold** across plastic types,
    soils and seasons [1, 3, 4, 7]. Frozen ground increases the loss [1].
    We found no PVC-specific β.
+3a. **The exact plastic is unknown** (noted 2026-11-19). The metadata says
+   only "PVC". We do not know the formulation or grade (for example
+   unplasticized PVC vs. oriented PVC, or its pressure class and wall
+   thickness), and some of the studies above measured polyethylene, not
+   PVC. Damping differs across these, so the published range cannot be
+   narrowed to our pipes. **The literature review therefore cannot remove
+   the PVC uncertainty**; it can only bound it, and the PVC calls stay
+   low confidence however the literature is used.
 4. **Pipe diameter and wall thickness.** These change both wave speed and
    loss [3]. Ours are unknown. Most studies used 150–170 mm pipe [1, 3].
    The one 63 mm study saw leak energy well above 200 Hz [6].
