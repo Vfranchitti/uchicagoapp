@@ -29,7 +29,6 @@ marked `leak`, meaning worth digging, although none exceeds 0.5.
 
 | File | What it is |
 |---|---|
-| `memo/552098215_memo.pdf` (and `.docx`) | Two-page write-up with figures; supplemental notes, sources and AI-use statement from page 3 |
 | `outputs/deliverables/552098215_predictions.csv` | Predictions in the template's three columns: `clip_id`, `prediction` (leak / no_leak), `confidence` (probability of a leak). U40 is unusable, so it gets the 1-in-8 base rate and `no_leak` |
 | `outputs/tables/3_model1/predictions_detail.csv` | Supplement: each site's range across analysis choices and a short note |
 
@@ -126,7 +125,6 @@ performance.
 | `outputs/deliverables/` | `552098215_predictions.csv` |
 | `outputs/tables/` | Every intermediate table, in one subfolder per pipeline stage |
 | `outputs/figures/` | Every figure: `1_eda/`, `2_model/`, `3_checks/`, `4_memo/`; `2_model/method_decision_tree.png` shows every decision and the alternatives considered |
-| `memo/` | The write-up (`552098215_memo.pdf` / `.docx`) |
 | `notes/` | `eda_notes.md`, `modeling/` (model choices and the assumptions checklist), `research/` (literature notes) |
 
 ## How to run

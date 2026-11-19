@@ -45,7 +45,7 @@ All four need the same two adjustments:
 - **Random forests, gradient boosting, SVMs with flexible kernels, neural
   networks or CNNs on spectrograms.** Each has hundreds to millions of
   parameters. With 6 labels they will fit perfectly and mean nothing; this
-  is exactly the Part 2 Q1 trap of 500 features and 6 recordings. SVM
+  is exactly the trap of 500 features and 6 recordings. SVM
   probabilities also need separate calibration data (Foster et al., ch. 7).
 - **Pretrained audio embeddings** (transfer learning). In principle these
   are richer features, but they still feed a classifier trained on 6

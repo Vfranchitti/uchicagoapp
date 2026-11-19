@@ -323,7 +323,7 @@ range of plausible probabilities for each site, not one number.
 | Benefits | Drawbacks |
 |---|---|
 | Builds the base rate in directly | Requires choosing priors for the slope, a judgment call that matters a lot with 6 points |
-| Gives an honest range (e.g., "20–60%") per site, ideal for the confidence column and Part 2 Q4 | More complex to explain and to run (simulation) |
+| Gives an honest range (e.g., "20–60%") per site, ideal for the confidence column | More complex to explain and to run (simulation) |
 | Naturally cautious | Same S-curve assumption as B2 |
 
 **Assumptions:**
@@ -342,7 +342,7 @@ range of plausible probabilities for each site, not one number.
 | Random forest, gradient boosting | Build hundreds of decision trees that need many examples; with 6 they memorize the 6 |
 | Support vector machine (flexible kernel) | Can draw any boundary around 6 points; its probabilities need extra labeled data to calibrate (textbook ch. 7) |
 | Neural networks / CNNs on spectrograms | Thousands to millions of settings learned from 6 examples; guaranteed to memorize |
-| Any model given 500 features | The Part 2 Q1 trap: with that many measurements, some will split 6 points perfectly by chance |
+| Any model given 500 features | With that many measurements, some will split 6 points perfectly by chance |
 
 ---
 
