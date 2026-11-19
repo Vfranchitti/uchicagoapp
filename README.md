@@ -101,9 +101,11 @@ down to 2%).
 **Known limitations.** The confidence values sum to 3.4 expected leaks
 across 39 sites, against about 4.9 expected at 1 in 8, so some leaks are
 probably missed (most likely silent, intermittent or distant ones, or on
-PVC). Persistence over time is still counted frame by frame, so traffic
-can mask a band in some frames (U03 has a steady band but scores low on
-persistence). The recordings look synthesized (brick-wall band edges,
+PVC). Steadiness (persistence over time × coverage across pitch) is
+still measured on 64 ms frames and on whole-clip spectra, where traffic
+can hide part of a band: U03 passes the steady-band test, but its band is
+present in 76% of frames and has no coverage in its whole-clip spectrum,
+so it sits at the bottom of the band tier. The recordings look synthesized (brick-wall band edges,
 identical leak levels), so results describe this pilot, not field
 performance.
 

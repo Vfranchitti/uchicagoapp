@@ -141,8 +141,8 @@ def plot_s_curve(fits, scores, model2):
         'raw-spectrum scores and with each dug site left out. PVC sites are '
         'read off the curve at their 250-400 Hz score (hollow), then '
         'discounted toward the base rate by the share of leak-signature '
-        'properties their band shares (filled; U34 3 of 5, U15 2 of 5). U40 '
-        'excluded (insufficient data quality).')
+        'properties their band shares (filled; U34 3 of 5, U15 and U03 2 '
+        'of 5). U40 excluded (insufficient data quality).')
     fig.subplots_adjust(top=0.9, bottom=bottom, left=0.1, right=0.98)
     return save_figure(fig, MODEL_FIGURE_DIR, 'model2_fig5_s_curve')
 
@@ -189,16 +189,17 @@ def plot_model_comparison(model1, model2):
     ax.legend(handles=handles, loc='lower right',
               fontsize=ANNOTATION_FONT_SIZE)
     bottom = add_title_and_note(
-        fig, 6, 'Both models flag the same sites but rank them differently',
+        fig, 6, 'The two models flag similar sites but rank them differently',
         'Markers are each model\'s main estimate; bars are its range across '
         'analysis choices; dashed line is the 1-in-8 base rate. Both apply '
-        'the same PVC signature discount. Model 1 gives every cast-iron site '
-        'with a persistent band 36-50% and grades within that by steadiness '
-        '(weighted 0.6) and intenseness (0.4), so those four sites lead. '
-        'Model 2 grades by intenseness alone (contrast in dB): U34 leads, '
-        'U17 and U15 stay '
-        'above the base rate, U07 sits at it, and U08 and U36 fall below '
-        'it. Sites without a persistent band are low under both models.')
+        'the same PVC signature discount. Model 1 gives every site with a '
+        'steady band 36-50% (before the PVC discount) and grades within '
+        'that by steadiness (weighted 0.6) and intenseness net of neighbor '
+        'noise (0.4), so the four cast-iron sites lead. Model 2 grades by '
+        'contrast in dB alone, which traffic lowers: U34 leads, U17 and U15 '
+        'stay above the base rate, U07 sits near it, and U08, U36 and U03 '
+        '(whose contrast traffic lowers to under 1 dB) fall below it. Sites '
+        'without a band are low under both models.')
     fig.subplots_adjust(top=0.9, bottom=bottom, left=0.25, right=0.98)
     return save_figure(fig, MODEL_FIGURE_DIR, 'model2_fig6_model_comparison')
 

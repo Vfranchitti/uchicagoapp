@@ -84,6 +84,9 @@ CLUSTER_COLUMNS = {'kmeans_k3': 'k-means, 3 groups',
                    'kmeans_k4': 'k-means, 4 groups',
                    'ward_k3': 'Ward, 3 groups', 'ward_k4': 'Ward, 4 groups'}
 EXTRA_GRID_ROWS = 4
+# Fig 1 height grows with the number of rows so labels do not overlap.
+DIG_LIST_BASE_HEIGHT = 1.9
+DIG_LIST_ROW_HEIGHT = 0.62
 # Hand-placed label offsets (points) where default labels collide.
 DECISION_MAP_LABEL_OFFSETS = {'U34': (4, -12), 'L01': (-6, 6),
                               'L05': (6, -12), 'L02': (5, 5),
@@ -93,14 +96,15 @@ SECONDS_PER_FRAME = (SPECTROGRAM_SEGMENT_SAMPLES
 
 
 def _reason(record, is_dig):
-    """One-line reason for a dig-list site."""
+    """One-line reason for a dig-list site (band edges and net level)."""
+    band = (f'{record.measured_band_low_hz:.0f}-'
+            f'{record.measured_band_high_hz:.0f} Hz')
     if record.ranking == 'pvc':
-        lead = 'Informative dig' if is_dig else 'Second PVC band'
-        return (f'{lead}: steady 250-400 Hz band (+{record.score:.1f} dB,\n'
-                f'present {record.persistence:.0%}); PVC signature '
-                f'unconfirmed')
-    return (f'Steady 400-1,300 Hz leak band (+{record.score:.1f} dB,\n'
-            f'present {record.persistence:.0%}), like the dug leaks')
+        lead = 'Informative dig' if is_dig else 'Other PVC band'
+        return (f'{lead}: steady {band} band ({record.corrected_level_db:.0f}'
+                f' dB\nnet of neighbors); PVC signature unconfirmed')
+    return (f'Steady {band} leak band ({record.corrected_level_db:.0f} dB\n'
+            f'net of neighbors), like the dug leaks')
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +117,8 @@ def plot_dig_list(probabilities):
     next_up = probabilities[(probabilities['prediction'] == 1)
                             & probabilities['dig_priority'].isna()]
     rows = pd.concat([dig, next_up])
-    fig, ax = plt.subplots(figsize=(7.5, 4.3))
+    fig, ax = plt.subplots(figsize=(7.5, DIG_LIST_BASE_HEIGHT
+                                    + DIG_LIST_ROW_HEIGHT * len(rows)))
     positions = np.arange(len(rows))[::-1]
     for position, record in zip(positions, rows.itertuples()):
         is_dig = not np.isnan(record.dig_priority)
@@ -157,14 +162,16 @@ def plot_dig_list(probabilities):
     ax.set_xlabel('Estimated chance of a leak', x=0.24)
     bottom = add_title_and_note(
         fig, 1, 'Where to dig this week, and how sure we are',
-        'Presence of a persistent band sets the range (36-50% with one, '
-        '2-3% without); the marker sits within it by band quality '
-        '(steadiness over time and across pitch, weighted 0.6, and '
-        'intenseness, contrast in dB, weighted 0.4, each relative to the dug '
-        'leaks). PVC sites are discounted toward the 1-in-8 base rate by the '
-        'share of five leak-signature properties their band shares (U34: '
-        '3 of 5). Bars span analysis choices; a wide bar means the band '
-        'falls below a cut-off in the raw-spectrum version. '
+        'Presence of a steady band (found on each recording\'s steady, '
+        'L90, level) sets the range (36-50% with one, 2-3% without); the '
+        'marker sits within it by band quality (steadiness over time and '
+        'across pitch, weighted 0.6, and intenseness, the band\'s level net '
+        'of its neighbors, weighted 0.4, each relative to the dug leaks). '
+        'U07 and U17 are tied; band strength sets their order only. PVC '
+        'sites are discounted toward the 1-in-8 base rate by the share of '
+        'five leak-signature properties their band shares (U34: 3 of 5; '
+        'U15 and U03: 2 of 5). Bars span analysis choices; a wide bar means '
+        'the band falls below a cut-off in the raw-spectrum version. '
         f'{ANALYSIS_EXCLUSION_REASON}')
     fig.subplots_adjust(top=0.88, bottom=bottom, left=0.1, right=0.98)
     return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig1_dig_list')
@@ -223,14 +230,15 @@ def plot_how_score_works(inputs, leak_band_hz):
     fig.subplots_adjust(wspace=0.32)
     bottom = add_title_and_note(
         fig, 2, 'How the score works: a band that stands out and never stops',
-        'A: the dug leak (L03) and top undug site (U17) carry a block of '
+        'A: the dug leak (L03) and an undug pick (U17) carry a block of '
         f'sound at {band_hz[0]:.0f}-{band_hz[1]:.0f} Hz that rises above the '
         'neighboring pitches (grey); the dug non-leak (L02) does not. '
         'Contrast = band minus the average of its neighbors. B: band '
         'contrast in each 64 ms moment. L06\'s band stays above the line '
-        'despite traffic; U35\'s apparent band is one impact. Sites whose '
-        'band is present in fewer than 90% of moments are scored down in '
-        'proportion.')
+        'despite traffic; U35\'s apparent band is one impact. Persistence '
+        '(B) feeds the steadiness grade; presence itself is tested on each '
+        'recording\'s steady (L90) level, so passing traffic cannot hide a '
+        'band.')
     fig.subplots_adjust(top=0.86, bottom=bottom + 0.1, left=0.08,
                         right=0.98)
     return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig2_how_score_works')
@@ -246,7 +254,8 @@ def plot_decision_map(scores, probabilities):
     ax.add_patch(Rectangle((PERSISTENT_BAND_MIN_CONTRAST_DB,
                             PERSISTENCE_CUTOFF), 30, 0.2,
                            color=FRESNO_BAND_BLUE, zorder=0, linewidth=0))
-    ax.text(23.5, PERSISTENCE_CUTOFF - 0.035, 'persistent band\n(leak-like)',
+    ax.text(23.5, PERSISTENCE_CUTOFF - 0.035,
+            'present in 90% of\n64 ms frames',
             ha='right', va='top', fontsize=SMALL_FONT_SIZE,
             color=HEALTH_LAB_TEAL,
             fontweight='bold')
@@ -260,6 +269,10 @@ def plot_decision_map(scores, probabilities):
                        marker=marker, s=34 if group == 'unlabeled' else 70,
                        color=color, edgecolor='white', linewidth=0.5,
                        zorder=3)
+    steady = main[main['has_band'].astype(bool)]
+    ax.scatter(steady['contrast_db'], steady['persistence'], s=150,
+               facecolor='none', edgecolor=TEXT_DARK, linewidth=0.9,
+               zorder=4)
     flagged = set(probabilities.loc[probabilities['prediction'] == 1,
                                     'clip_id'])
     to_label = main[main['label_group'].isin(DUG_LABELS)
@@ -290,7 +303,10 @@ def plot_decision_map(scores, probabilities):
         Line2D([], [], marker='o', linestyle='', color=HEALTH_LAB_NAVY,
                label='Cast iron, not dug (400-1,300 Hz band)'),
         Line2D([], [], marker='^', linestyle='', color=HEALTH_LAB_LIGHT_TEAL,
-               label='PVC, not dug (250-400 Hz band)'),
+               label='PVC, not dug (low band)'),
+        Line2D([], [], marker='o', linestyle='', markerfacecolor='none',
+               markeredgecolor=TEXT_DARK, markersize=9,
+               label='Steady band found (presence test)'),
         Line2D([], [], marker='o', linestyle='', color=LABEL_COLORS[
             LEAK_LABEL], label='Dug: leak'),
         Line2D([], [], marker='o', linestyle='', color=LABEL_COLORS[
@@ -301,10 +317,13 @@ def plot_decision_map(scores, probabilities):
         'leaks',
         'Each point is one recording (noise floor removed). Cast-iron sites '
         'are measured on the 400-1,300 Hz leak band, PVC sites on the '
-        '250-400 Hz band. The shaded corner (band present in at least 90% of '
-        'moments and standing out by at least 3 dB) holds all three dug '
-        'leaks, no dug non-leak, four undug cast-iron sites and two PVC '
-        f'sites. {ANALYSIS_EXCLUSION_REASON}')
+        '250-400 Hz band. Rings mark sites that pass the presence test (a '
+        'steady band in the recording\'s L90 level): all three dug leaks, '
+        'no dug non-leak, four undug cast-iron sites and three PVC sites. '
+        'U03 passes although traffic masks its band in about a quarter of '
+        '64 ms frames (present 76%), so it sits below the shaded '
+        'frame-rule corner. '
+        f'{ANALYSIS_EXCLUSION_REASON}')
     fig.subplots_adjust(top=0.9, bottom=bottom, left=0.12, right=0.98)
     return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig3_decision_map')
 
@@ -387,13 +406,15 @@ def plot_robustness_grid(grid, pipe_by_clip):
               fontsize=ANNOTATION_FONT_SIZE)
     bottom = add_title_and_note(
         fig, 4, 'Which picks survive every check?',
-        '"Flagged" means a persistent band (Model 1 columns) or membership '
-        'in the cluster holding the dug leaks (clustering columns). Leave-'
-        'one-out rebuilds the cast-iron band without each dug site; it does '
-        'not apply to PVC, whose band is fixed in advance. U17 is flagged '
-        'under every check; U07 under all but two clusterings. U08 and U36 '
-        'fall just under the 3 dB line in the raw version, and U15\'s band '
-        'drops below 90% presence there.')
+        '"Flagged" means a band passes the presence test (main version: a '
+        'steady band in the L90 level; raw version and leave-one-out: band '
+        'in 90% of 64 ms frames) or membership in the cluster holding the '
+        'dug leaks (clustering columns). Leave-one-out rebuilds the '
+        'cast-iron band without each dug site; it does not apply to PVC, '
+        'whose band does not depend on the dug sites. U17 is flagged under '
+        'every check; U07 under all but two clusterings. U08 and U36 fall '
+        'below a cut-off in the raw version, as do U15 and U03; only U34 '
+        'of the PVC sites is flagged in both versions.')
     fig.subplots_adjust(top=0.85, bottom=bottom + 0.12, left=0.16,
                         right=0.98)
     return save_figure(fig, MODEL_FIGURE_DIR, 'model1_fig4_robustness_grid')

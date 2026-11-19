@@ -54,6 +54,12 @@ fading toward 1,300 Hz.
 - **Model calls a quiet PVC site "no leak"** (U18–U20, U25, U33): the
   prediction says a distant PVC leak would also look quiet, so "no leak" is
   low confidence, not confirmed.
+- **U03 (added 2026-11-19, final model):** the final model flags U03 for
+  a steady 328–448 Hz band found in its L90 level, but its average
+  spectrum carries energy up to 1,300 Hz, which a PVC leak should not
+  have. The regenerated comparison table
+  (`outputs/tables/5_checks/sanity_pvc_vs_model_calls.csv`) records this
+  as a disagreement: treat U03's call (22%) with extra caution.
 - **U34 and U15:** their band sits below anything a filtered cast-iron leak
   could produce. If they are leaks, the data generator gives PVC leaks a
   different signature. Literature cannot confirm that, and the sharp edges

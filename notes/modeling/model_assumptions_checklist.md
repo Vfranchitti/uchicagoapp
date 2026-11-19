@@ -63,6 +63,25 @@ These sit underneath every option. If one fails, every model is affected.
       - PVC band sites are discounted by their signature match w, the share
         of 5 leak-signature properties they share: U34 w = 0.6 → 34.9%,
         U15 w = 0.4 → 26.3%. This keeps cast iron ranked above PVC.
+    - **Final model (2026-11-19), superseding the band and intenseness
+      details above:**
+      - Presence for both materials comes from steady-band detection
+        (`src/detect_steady_bands.py`): a steady band in the recording's
+        L90 level (10th percentile over 250 ms frames), distinct from its
+        material's shared background and from both sides. PVC is no longer
+        searched at a fixed 250–400 Hz; the data place all three PVC bands
+        near 320–450 Hz (U34, U15 and newly U03).
+      - Intenseness is the corrected band level: the band's steady power
+        minus its neighbors' (PVC: upper neighbor only), relative to the
+        weakest dug leak and capped at 1. Steadiness is unchanged
+        (persistence over time × coverage across pitch).
+      - Signature match: U34 w = 0.6 → 34.7%; U15 and U03 w = 0.4 → 25.8%
+        and 22.0%.
+      - Caution on A8: the same 320–450 Hz band appears at a cast-iron
+        site (U02) on logger A, the same logger as U34, so on that logger
+        it is not specific to PVC. The PVC grade is also unknown, so the
+        literature can bound but not remove this uncertainty
+        (`notes/research/pvc_attenuation_research.md`, item 3a).
     - The literature-based map from cast-iron to PVC leaks
       (`notes/modeling/sanity_check_pvc_prediction.md`) is **held out of the
       model**. It is used only as an end-of-modeling sanity check.
