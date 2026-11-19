@@ -261,7 +261,8 @@ def _write_summary(lr_table, summary, dig_list, reference, weights,
                    sensitivity):
     """Plain-language Markdown summary."""
     lines = ['# Model 1 probabilities: presence first, then quality', '',
-             f'- {ANALYSIS_EXCLUSION_REASON} No prediction for U40.',
+             f'- {ANALYSIS_EXCLUSION_REASON} U40 is not scored; the '
+             f'predictions file gives it the 1-in-8 base rate.',
              f'- Prior: 1 in 8 ({HISTORICAL_LEAK_RATE:.1%}).']
     for pseudo_count, (lr_present, lr_absent) in lr_table.items():
         lines.append(

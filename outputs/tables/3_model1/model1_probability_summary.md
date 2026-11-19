@@ -1,6 +1,6 @@
 # Model 1 probabilities: presence first, then quality
 
-- U40 excluded (insufficient data quality): signal saturation (15% of samples clipped) and a 1.2 s dropout make its features invalid. No prediction for U40.
+- U40 excluded (insufficient data quality): signal saturation (15% of samples clipped) and a 1.2 s dropout make its features invalid. U40 is not scored; the predictions file gives it the 1-in-8 base rate.
 - Prior: 1 in 8 (12.5%).
 - Smoothing +0.5: LR(band) = 7.0 -> 50.0%; LR(no band) = 0.14 -> 2.0%.
 - Smoothing +1: LR(band) = 4.0 -> 36.4%; LR(no band) = 0.25 -> 3.4%.

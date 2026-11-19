@@ -40,6 +40,8 @@ PIPELINE = (
     'check_self_training',
     # 6. Method summary (a diagram; reads no data)
     'plot_method_tree',
+    # 7. Memo figures (read outputs of the steps above)
+    'plot_memo_figures',
 )
 
 

@@ -38,4 +38,4 @@ U36,leak,0.44,0.02,0.5,1,band falls below a cut-off in raw version; dig 4
 U37,no_leak,0.02,0.02,0.034,0,
 U38,no_leak,0.02,0.02,0.034,0,
 U39,no_leak,0.02,0.02,0.034,0,
-U40,excluded: insufficient data quality,,,,,"low-quality recording, not fit for analysis: signal saturation (about 15% of samples clipped at sensor full scale) and a 1.2 s dropout (constant zero-valued samples); amplitude and spectral features are invalid, so no prediction is made"
+U40,no_leak,0.125,0.125,0.125,0,"unusable recording (about 15% of samples clipped at the sensor limit and a 1.2 s dropout), so it carries no evidence: confidence is the 1-in-8 base rate"

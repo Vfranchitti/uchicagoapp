@@ -1,17 +1,26 @@
 """Fill the predictions template from Model 1's probabilities.
 
-Columns
+Deliverable (exactly the template's columns)
+--------------------------------------------
+clip_id, prediction (leak / no_leak), confidence
+
+confidence is the probability from 0 to 1 that the site has a leak, as the
+instructions define it (main-analysis estimate; see
+compute_model1_probabilities.py). prediction is 'leak' for every site with a
+persistent band, meaning "worth digging", although no site exceeds 0.5 (the
+evidence from six dug sites cannot lift a 1-in-8 site above about even).
+
+U40 is unusable (sensor overload and a dropout), so its recording carries no
+evidence: it gets the 1-in-8 base rate and 'no_leak' (no band was found).
+
+Supplement (ranges and notes, kept out of the deliverable)
+----------------------------------------------------------
+confidence_low, confidence_high, leak_flag, note
+
+Outputs
 -------
-clip_id, prediction (leak / no_leak), confidence    template columns
-confidence_low, confidence_high                     sensitivity range
-leak_flag (1 / 0)                                   same call as prediction
-note                                                why a row is special
-
-confidence is the main-analysis probability (see
-compute_model1_probabilities.py). Excluded clips (U40) have no score, so
-they get no prediction: 'excluded from analysis', blank confidence, and a note.
-
-Output: outputs/deliverables/predictions.csv
+outputs/deliverables/<reference>_predictions.csv
+outputs/tables/3_model1/predictions_detail.csv
 """
 import pandas as pd
 
@@ -20,18 +29,18 @@ from src.config import (
     HISTORICAL_LEAK_RATE,
     INFORMATIVE_DIG_SITE,
     MODEL1_PROBABILITY_PATH,
+    PREDICTIONS_DETAIL_PATH,
     PREDICTIONS_OUTPUT_PATH,
     PREDICTIONS_TEMPLATE_PATH,
 )
+from src.utils import make_output_dirs
 
 LEAK_WORD, NO_LEAK_WORD = 'leak', 'no_leak'
 PROBABILITY_DECIMALS = 3
-EXCLUDED_PREDICTION = 'excluded: insufficient data quality'
-EXCLUDED_NOTE = ('low-quality recording, not fit for analysis: signal '
-                 'saturation (about 15% of samples clipped at sensor '
-                 'full scale) and a 1.2 s dropout (constant zero-valued '
-                 'samples); amplitude and spectral features are invalid, '
-                 'so no prediction is made')
+TEMPLATE_COLUMNS = ['clip_id', 'prediction', 'confidence']
+EXCLUDED_NOTE = ('unusable recording (about 15% of samples clipped at the '
+                 'sensor limit and a 1.2 s dropout), so it carries no '
+                 'evidence: confidence is the 1-in-8 base rate')
 
 
 def _note(record):
@@ -50,25 +59,25 @@ def _note(record):
 
 
 def build_predictions():
-    """Template rows filled with prediction, confidence, and range."""
+    """All rows: prediction, confidence, range and note per site."""
     template = pd.read_csv(PREDICTIONS_TEMPLATE_PATH)
     probabilities = pd.read_csv(MODEL1_PROBABILITY_PATH)
     probabilities['note'] = [_note(r) for r in probabilities.itertuples()]
     merged = template[['clip_id']].merge(probabilities, on='clip_id',
                                          how='left', validate='one_to_one')
     is_excluded = merged['clip_id'].isin(ANALYSIS_EXCLUDED_CLIPS)
-    merged.loc[is_excluded, 'note'] = EXCLUDED_NOTE
     missing = merged.loc[merged['confidence'].isna() & ~is_excluded,
                          'clip_id'].tolist()
     if missing:
         raise ValueError(f'No probability for: {missing}')
-    leak_flag = merged['prediction'].astype('Int64')
-    prediction = leak_flag.map({1: LEAK_WORD, 0: NO_LEAK_WORD}).astype(
-        object)
-    prediction[is_excluded] = EXCLUDED_PREDICTION
+    for column in ('confidence', 'probability_low', 'probability_high'):
+        merged.loc[is_excluded, column] = HISTORICAL_LEAK_RATE
+    merged.loc[is_excluded, 'prediction'] = 0
+    merged.loc[is_excluded, 'note'] = EXCLUDED_NOTE
+    leak_flag = merged['prediction'].astype(int)
     return pd.DataFrame({
         'clip_id': merged['clip_id'],
-        'prediction': prediction,
+        'prediction': leak_flag.map({1: LEAK_WORD, 0: NO_LEAK_WORD}),
         'confidence': merged['confidence'].round(PROBABILITY_DECIMALS),
         'confidence_low': merged['probability_low'].round(
             PROBABILITY_DECIMALS),
@@ -81,6 +90,8 @@ def build_predictions():
 
 if __name__ == '__main__':
     predictions = build_predictions()
-    predictions.to_csv(PREDICTIONS_OUTPUT_PATH, index=False)
+    make_output_dirs()
+    predictions[TEMPLATE_COLUMNS].to_csv(PREDICTIONS_OUTPUT_PATH, index=False)
+    predictions.to_csv(PREDICTIONS_DETAIL_PATH, index=False)
     print(f'Wrote {len(predictions)} rows to {PREDICTIONS_OUTPUT_PATH}')
     print(predictions.to_string(index=False))

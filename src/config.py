@@ -34,13 +34,17 @@ FIGURE_DIR = OUTPUT_DIR / 'figures'
 EDA_FIGURE_DIR = FIGURE_DIR / '1_eda'
 MODEL_FIGURE_DIR = FIGURE_DIR / '2_model'
 CHECKS_FIGURE_DIR = FIGURE_DIR / '3_checks'
+MEMO_FIGURE_DIR = FIGURE_DIR / '4_memo'
 OUTPUT_SUBDIRS = (DELIVERABLES_DIR, QUALITY_TABLE_DIR, EDA_TABLE_DIR,
                   MODEL1_TABLE_DIR, MODEL2_TABLE_DIR, CHECKS_TABLE_DIR,
-                  EDA_FIGURE_DIR, MODEL_FIGURE_DIR, CHECKS_FIGURE_DIR)
+                  EDA_FIGURE_DIR, MODEL_FIGURE_DIR, CHECKS_FIGURE_DIR,
+                  MEMO_FIGURE_DIR)
 
-# Deliverable. Rename with the application reference number before
-# submitting (e.g., 1234567_predictions.csv).
-PREDICTIONS_OUTPUT_PATH = DELIVERABLES_DIR / 'predictions.csv'
+# Deliverables. Submitted file names start with the applicant reference
+# number, as the instructions require.
+APPLICANT_REFERENCE = '552098215'
+PREDICTIONS_OUTPUT_PATH = (DELIVERABLES_DIR
+                           / f'{APPLICANT_REFERENCE}_predictions.csv')
 
 # Stage 1: data quality
 DATA_CHECKS_CSV_PATH = QUALITY_TABLE_DIR / 'data_checks.csv'
@@ -70,6 +74,8 @@ MODEL1_SUMMARY_PATH = MODEL1_TABLE_DIR / 'model1_summary.md'
 MODEL1_PROBABILITY_PATH = MODEL1_TABLE_DIR / 'model1_probabilities.csv'
 MODEL1_PROBABILITY_SUMMARY_PATH = (MODEL1_TABLE_DIR
                                    / 'model1_probability_summary.md')
+# Ranges and notes for every site (supplement to the predictions file)
+PREDICTIONS_DETAIL_PATH = MODEL1_TABLE_DIR / 'predictions_detail.csv'
 # Steady-band detection (the presence test of the final Model 1)
 BAND_SCAN_TABLE_PATH = MODEL1_TABLE_DIR / 'band_scan_bands.csv'
 BAND_SCAN_MAP_PATH = MODEL1_TABLE_DIR / 'band_scan_map.csv'

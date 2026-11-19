@@ -21,10 +21,17 @@ probability for each site. The task description is in
 U07 and U17 are tied under the model (both at the top of the band tier,
 50%). Band strength (the uncapped corrected band level) is used only as a
 one-time tie-breaker for dig order; it does not change any confidence
-value. A typical surveyed site has a 12.5% (1 in 8) chance. The full file is
-`outputs/deliverables/predictions.csv`; its `confidence` column is the
-probability that the site has a leak, as the instructions define it. U40
-gets no prediction (insufficient data quality; see below).
+value. A typical surveyed site has a 12.5% (1 in 8) chance. Six dug sites
+can lift a site to about 50% at most, so every site with a steady band is
+marked `leak`, meaning worth digging, although none exceeds 0.5.
+
+**Deliverables** (file names start with the applicant reference number):
+
+| File | What it is |
+|---|---|
+| `memo/552098215_memo.pdf` (and `.docx`) | Two-page write-up with figures; supplemental notes, sources and AI-use statement from page 3 |
+| `outputs/deliverables/552098215_predictions.csv` | Predictions in the template's three columns: `clip_id`, `prediction` (leak / no_leak), `confidence` (probability of a leak). U40 is unusable, so it gets the 1-in-8 base rate and `no_leak` |
+| `outputs/tables/3_model1/predictions_detail.csv` | Supplement: each site's range across analysis choices and a short note |
 
 ## Method in brief
 
@@ -116,9 +123,10 @@ performance.
 | `data/` | The provided recordings and metadata (read-only; never modified) |
 | `docs/` | Task instructions and reference briefs used for report style |
 | `src/` | All analysis code (one script per step; see the pipeline table) |
-| `outputs/deliverables/` | `predictions.csv` |
+| `outputs/deliverables/` | `552098215_predictions.csv` |
 | `outputs/tables/` | Every intermediate table, in one subfolder per pipeline stage |
-| `outputs/figures/` | Every figure: `1_eda/`, `2_model/`, `3_checks/`; `2_model/method_decision_tree.png` shows every decision and the alternatives considered |
+| `outputs/figures/` | Every figure: `1_eda/`, `2_model/`, `3_checks/`, `4_memo/`; `2_model/method_decision_tree.png` shows every decision and the alternatives considered |
+| `memo/` | The write-up (`552098215_memo.pdf` / `.docx`) |
 | `notes/` | `eda_notes.md`, `modeling/` (model choices and the assumptions checklist), `research/` (literature notes) |
 
 ## How to run
@@ -157,7 +165,7 @@ scikit-learn memory warning during clustering.
 | 13 | `detect_steady_bands.py` | Steady-band detection report: bands found, cast-iron validation, logger cross-check | `tables/3_model1/band_scan_*`, `figures/2_model/band_scan_map.png` |
 | 14 | `compute_model1_probabilities.py` | Leak probabilities: presence tier, then quality; PVC discount; weight sensitivity | `tables/3_model1/model1_probabilities.csv` |
 | 15 | `measure_band_evenness.py` | Band coverage across pitches (used by step 14) | `tables/2_eda/band_evenness.csv` |
-| 16 | `write_predictions.py` | Fills the predictions template | `deliverables/predictions.csv` |
+| 16 | `write_predictions.py` | Fills the predictions template; writes ranges and notes separately | `deliverables/552098215_predictions.csv`, `tables/3_model1/predictions_detail.csv` |
 | 17 | `plot_model1_results.py` | Model 1 figures: dig list, how the score works, decision map, robustness grid | `figures/2_model/model1_fig1–4` |
 | 18 | `run_model_logistic.py` | **Model 2** (alternative model): Firth logistic regression on the Model 1 score | `tables/4_model2/` |
 | 19 | `plot_model2_results.py` | Model 2 curve; Model 1 vs. Model 2 | `figures/2_model/model2_fig5–6` |
@@ -165,6 +173,7 @@ scikit-learn memory warning during clustering.
 | 21 | `sanity_compare_pvc_calls.py` | Compares the PVC calls with that picture | `tables/5_checks/` |
 | 22 | `check_self_training.py` | Label spreading and self-training robustness checks | `tables/5_checks/check_self_training.md` |
 | 23 | `plot_method_tree.py` | Decision tree: route taken and options considered at each step | `figures/2_model/method_decision_tree.png` |
+| 24 | `plot_memo_figures.py` | The four memo figures (recording timeline, leak signature, chances by site, robustness) | `figures/4_memo/` |
 
 Shared code: `config.py` (every path and constant, defined once, with the
 reason for each setting), `load_recordings.py` (reads the data),
